@@ -117,6 +117,7 @@ export type UserActivityUserInfo = {
   id: string;
   name: string | null;
   email: string;
+  profileImageUrl: string | null;
   roles: WorkspaceRole[];
   membershipStatus: UserActivityMembershipStatus;
   joinedAt: string | null;

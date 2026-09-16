@@ -72,6 +72,7 @@ type UserActivityIdentity = {
   email: string;
   id: string;
   name: string | null;
+  profileImageUrl: string | null;
 };
 
 function isActivityInRange(
@@ -896,6 +897,7 @@ export const getUserActivity = async (
           id: true,
           name: true,
           email: true,
+          profileImageUrl: true,
         },
       },
     },
@@ -936,6 +938,7 @@ export const getUserActivity = async (
         id: true,
         name: true,
         email: true,
+        profileImageUrl: true,
       },
     });
 
@@ -1184,6 +1187,7 @@ export const getUserActivity = async (
       id: identity.id,
       name: identity.name,
       email: identity.email,
+      profileImageUrl: identity.profileImageUrl,
       roles,
       membershipStatus,
       joinedAt,
