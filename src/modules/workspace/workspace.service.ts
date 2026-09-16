@@ -49,6 +49,7 @@ const safeWorkspaceMemberListSelect = {
     select: {
       name: true,
       email: true,
+      profileImageUrl: true,
     },
   },
 } as const;
@@ -62,12 +63,13 @@ const toWorkspaceMemberListItem = (membership: {
   listerAssignmentEnabled: boolean;
   listerAssignmentPausedUntil: Date | null;
   createdAt: Date;
-  user: { name: string | null; email: string };
+  user: { name: string | null; email: string; profileImageUrl: string | null };
 }) => ({
   membershipId: membership.id,
   userId: membership.userId,
   name: membership.user.name,
   email: membership.user.email,
+  profileImageUrl: membership.user.profileImageUrl,
   roles: membership.roles,
   designerAssignmentEnabled: membership.designerAssignmentEnabled,
   designerAssignmentPausedUntil: membership.designerAssignmentPausedUntil,
@@ -267,6 +269,7 @@ export const getWorkspaceMembers = async (
         select: {
           name: true,
           email: true,
+          profileImageUrl: true,
         },
       },
     },

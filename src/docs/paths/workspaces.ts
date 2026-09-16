@@ -33,12 +33,13 @@ const pendingInviteData = {
 
 const workspaceMemberData = {
   type: "object",
-  required: ["membershipId", "userId", "name", "email", "roles", "designerAssignmentEnabled", "designerAssignmentPausedUntil", "listerAssignmentEnabled", "listerAssignmentPausedUntil", "joinedAt"],
+  required: ["membershipId", "userId", "name", "email", "profileImageUrl", "roles", "designerAssignmentEnabled", "designerAssignmentPausedUntil", "listerAssignmentEnabled", "listerAssignmentPausedUntil", "joinedAt"],
   properties: {
     membershipId: { type: "string" },
     userId: { type: "string" },
     name: { type: "string", nullable: true },
     email: { type: "string", format: "email" },
+    profileImageUrl: { type: "string", format: "uri", nullable: true },
     roles: { type: "array", items: { $ref: "#/components/schemas/WorkspaceRole" } },
     designerAssignmentEnabled: { type: "boolean" },
     designerAssignmentPausedUntil: { type: "string", format: "date-time", nullable: true },

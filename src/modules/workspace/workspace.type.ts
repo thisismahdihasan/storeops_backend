@@ -46,6 +46,7 @@ export type WorkspaceMemberListItem = {
   userId: string;
   name: string | null;
   email: string;
+  profileImageUrl: string | null;
   roles: WorkspaceRole[];
   designerAssignmentEnabled: boolean;
   designerAssignmentPausedUntil: Date | null;
