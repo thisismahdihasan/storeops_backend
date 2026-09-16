@@ -134,8 +134,7 @@ const safeDesignerDetailSelect = Prisma.validator<Prisma.ResearchItemSelect>()({
     },
   },
   reviewSubmissions: {
-    orderBy: [{ roundNumber: "desc" }, { id: "desc" }],
-    take: 1,
+    orderBy: [{ roundNumber: "asc" }, { id: "asc" }],
     select: {
       id: true,
       roundNumber: true,
@@ -222,8 +221,39 @@ export const getDesignDetail = async (
     throw new ApiError(403, "You are not assigned to this research item");
   }
 
-  const latestReview = researchItem.reviewSubmissions[0] ?? null;
+  const latestReview =
+    researchItem.reviewSubmissions[researchItem.reviewSubmissions.length - 1] ??
+    null;
   const latestIssue = researchItem.issueReports[0] ?? null;
+  const previousReviews = researchItem.reviewSubmissions.slice(0, -1).map(
+    (review) => ({
+      id: review.id,
+      roundNumber: review.roundNumber,
+      imageUrl:
+        review.imageDeletedAt === null ? review.imageUrl : null,
+      imageDeletedAt: review.imageDeletedAt,
+      note: review.note,
+      submittedAt: review.submittedAt,
+      annotations: review.annotations.map((annotation) => ({
+        id: annotation.id,
+        x: annotation.x,
+        y: annotation.y,
+        comment: annotation.comment,
+        createdAt: annotation.createdAt,
+        createdBy: {
+          name: annotation.createdBy.name,
+        },
+        replies: annotation.replies.map((reply) => ({
+          id: reply.id,
+          message: reply.message,
+          createdAt: reply.createdAt,
+          createdBy: {
+            name: reply.createdBy.name,
+          },
+        })),
+      })),
+    })
+  );
 
   return {
     researchItem: {
@@ -258,6 +288,9 @@ export const getDesignDetail = async (
           annotations: latestReview.annotations,
         }
       : null,
+    reviewHistory: {
+      previousReviews,
+    },
     latestIssue,
     finalAssets: {
       count: researchItem.finalAssets.length,

@@ -41,6 +41,33 @@ export type DesignerDetailLatestReview = {
   annotations: DesignerDetailAnnotation[];
 };
 
+export type DesignWorkspaceReview = {
+  id: string;
+  roundNumber: number;
+  imageUrl: string | null;
+  imageDeletedAt: Date | null;
+  note: string | null;
+  submittedAt: Date;
+  annotations: Array<{
+    id: string;
+    x: number;
+    y: number;
+    comment: string;
+    createdAt: Date;
+    createdBy: {
+      name: string | null;
+    };
+    replies: Array<{
+      id: string;
+      message: string;
+      createdAt: Date;
+      createdBy: {
+        name: string | null;
+      };
+    }>;
+  }>;
+};
+
 export type DesignerDetailFinalAsset = {
   id: string;
   fileName: string;
@@ -68,6 +95,9 @@ export type DesignerDetailResult = {
   };
   currentDesigner: DesignerDetailUser;
   latestReview: DesignerDetailLatestReview | null;
+  reviewHistory: {
+    previousReviews: DesignWorkspaceReview[];
+  };
   latestIssue: {
     id: string;
     reason: string;
