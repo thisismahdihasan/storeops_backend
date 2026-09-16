@@ -60,6 +60,7 @@ const duplicateResearchItemSelect = {
       id: true,
       name: true,
       email: true,
+      profileImageUrl: true,
     },
   },
 } as const;
@@ -295,6 +296,7 @@ export const safeResearchItemListSelect = Prisma.validator<Prisma.ResearchItemSe
       id: true,
       name: true,
       email: true,
+      profileImageUrl: true,
     },
   },
   designAssignments: {
@@ -313,6 +315,7 @@ export const safeResearchItemListSelect = Prisma.validator<Prisma.ResearchItemSe
           id: true,
           name: true,
           email: true,
+          profileImageUrl: true,
         },
       },
     },
@@ -330,6 +333,7 @@ export const safeResearchItemListSelect = Prisma.validator<Prisma.ResearchItemSe
           id: true,
           name: true,
           email: true,
+          profileImageUrl: true,
         },
       },
     },
@@ -352,6 +356,7 @@ const safeResearchItemDetailSelect = {
       id: true,
       name: true,
       email: true,
+      profileImageUrl: true,
     },
   },
   designAssignments: {
@@ -369,6 +374,7 @@ const safeResearchItemDetailSelect = {
           id: true,
           name: true,
           email: true,
+          profileImageUrl: true,
         },
       },
     },

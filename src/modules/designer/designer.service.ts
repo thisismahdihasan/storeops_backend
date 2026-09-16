@@ -1427,6 +1427,7 @@ export const getAdminDesignList = async (
                 id: true,
                 name: true,
                 email: true,
+                profileImageUrl: true,
               },
             },
           },

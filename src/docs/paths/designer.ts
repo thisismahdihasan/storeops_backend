@@ -194,11 +194,12 @@ export const designerPaths: OpenApiPathMap = {
                   currentDesigner: {
                     type: "object",
                     nullable: true,
-                    required: ["id", "name", "email"],
+                    required: ["id", "name", "email", "profileImageUrl"],
                     properties: {
                       id: { type: "string" },
                       name: { type: "string", nullable: true },
                       email: { type: "string", format: "email" },
+                      profileImageUrl: { type: "string", format: "uri", nullable: true },
                     },
                   },
                   latestReview: {

@@ -147,21 +147,23 @@ export const openApiComponents = {
     },
     CreatedBySummary: {
       type: "object",
-      required: ["id", "email", "name"],
+      required: ["id", "email", "name", "profileImageUrl"],
       properties: {
         id: stringId,
         email: { type: "string", format: "email" },
         name: { type: "string", nullable: true },
+        profileImageUrl: { type: "string", format: "uri", nullable: true },
       },
     },
     NullableUserSummary: {
       type: "object",
       nullable: true,
-      required: ["id", "email", "name"],
+      required: ["id", "email", "name", "profileImageUrl"],
       properties: {
         id: stringId,
         email: { type: "string", format: "email" },
         name: { type: "string", nullable: true },
+        profileImageUrl: { type: "string", format: "uri", nullable: true },
       },
     },
     WorkspaceSummary: {

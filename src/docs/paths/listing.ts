@@ -83,11 +83,12 @@ export const listingPaths: OpenApiPathMap = {
                   currentLister: {
                     type: "object",
                     nullable: true,
-                    required: ["id", "name", "email"],
+                    required: ["id", "name", "email", "profileImageUrl"],
                     properties: {
                       id: { type: "string" },
                       name: { type: "string", nullable: true },
                       email: { type: "string", format: "email" },
+                      profileImageUrl: { type: "string", format: "uri", nullable: true },
                     },
                   },
                   listingResult: {
@@ -100,11 +101,12 @@ export const listingPaths: OpenApiPathMap = {
                       listedAt: { type: "string", format: "date-time" },
                       listedBy: {
                         type: "object",
-                        required: ["id", "name", "email"],
+                        required: ["id", "name", "email", "profileImageUrl"],
                         properties: {
                           id: { type: "string" },
                           name: { type: "string", nullable: true },
                           email: { type: "string", format: "email" },
+                          profileImageUrl: { type: "string", format: "uri", nullable: true },
                         },
                       },
                     },
