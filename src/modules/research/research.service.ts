@@ -719,6 +719,23 @@ export type ResearchReviewActivityMap = Record<
   }
 >;
 
+type ResearchReviewActivityAggregateRow = {
+  researchItemId: string;
+  designerReplyCount: bigint;
+  latestDesignerReplyAt: Date | null;
+  latestReviewId: string | null;
+};
+
+const MAX_SAFE_REPLY_COUNT = BigInt(Number.MAX_SAFE_INTEGER);
+
+const toSafeReplyCount = (count: bigint): number => {
+  if (count < 0n || count > MAX_SAFE_REPLY_COUNT) {
+    throw new Error("Designer reply count exceeds JavaScript safe integer range");
+  }
+
+  return Number(count);
+};
+
 // Fetches review activity (designer reply count, latest review ID, latest designer reply timestamp)
 // in a single batched query for the current research item IDs, preventing N+1 queries.
 export const getResearchReviewActivityMap = async (
@@ -737,55 +754,59 @@ export const getResearchReviewActivityMap = async (
     };
   }
 
-  const reviewSubmissions = await prisma.reviewSubmission.findMany({
-    where: {
-      researchItemId: { in: itemIds },
-    },
-    select: {
-      id: true,
-      researchItemId: true,
-      roundNumber: true,
-      designerId: true,
-      annotations: {
-        select: {
-          replies: {
-            select: {
-              id: true,
-              createdById: true,
-              createdAt: true,
-            },
-          },
-        },
-      },
-    },
-    orderBy: [
-      { roundNumber: "desc" },
-      { id: "desc" },
-    ],
-  });
+  const rows = await prisma.$queryRaw<ResearchReviewActivityAggregateRow[]>(
+    Prisma.sql`
+      WITH input_items AS (
+        SELECT DISTINCT UNNEST(ARRAY[${Prisma.join(itemIds)}]::text[]) AS "researchItemId"
+      ),
+      latest_reviews AS (
+        SELECT DISTINCT ON (review."researchItemId")
+          review."researchItemId",
+          review."id" AS "latestReviewId"
+        FROM "ReviewSubmission" AS review
+        WHERE review."researchItemId" IN (
+          SELECT "researchItemId" FROM input_items
+        )
+        ORDER BY
+          review."researchItemId",
+          review."roundNumber" DESC,
+          review."id" DESC
+      ),
+      designer_reply_activity AS (
+        SELECT
+          review."researchItemId",
+          COUNT(reply."id") AS "designerReplyCount",
+          MAX(reply."createdAt") AS "latestDesignerReplyAt"
+        FROM "ReviewSubmission" AS review
+        INNER JOIN "ReviewAnnotation" AS annotation
+          ON annotation."reviewSubmissionId" = review."id"
+        INNER JOIN "AnnotationReply" AS reply
+          ON reply."annotationId" = annotation."id"
+          AND reply."createdById" = review."designerId"
+        WHERE review."researchItemId" IN (
+          SELECT "researchItemId" FROM input_items
+        )
+        GROUP BY review."researchItemId"
+      )
+      SELECT
+        input_items."researchItemId",
+        COALESCE(designer_reply_activity."designerReplyCount", 0) AS "designerReplyCount",
+        designer_reply_activity."latestDesignerReplyAt",
+        latest_reviews."latestReviewId"
+      FROM input_items
+      LEFT JOIN latest_reviews
+        ON latest_reviews."researchItemId" = input_items."researchItemId"
+      LEFT JOIN designer_reply_activity
+        ON designer_reply_activity."researchItemId" = input_items."researchItemId"
+    `
+  );
 
-  for (const submission of reviewSubmissions) {
-    const entry = map[submission.researchItemId];
-    if (!entry) continue;
-
-    // The first submission encountered for each item has the highest roundNumber
-    if (!entry.latestReviewId) {
-      entry.latestReviewId = submission.id;
-    }
-
-    for (const annotation of submission.annotations) {
-      for (const reply of annotation.replies) {
-        if (reply.createdById === submission.designerId) {
-          entry.designerReplyCount += 1;
-          if (
-            !entry.latestDesignerReplyAt ||
-            reply.createdAt > entry.latestDesignerReplyAt
-          ) {
-            entry.latestDesignerReplyAt = reply.createdAt;
-          }
-        }
-      }
-    }
+  for (const row of rows) {
+    map[row.researchItemId] = {
+      designerReplyCount: toSafeReplyCount(row.designerReplyCount),
+      latestDesignerReplyAt: row.latestDesignerReplyAt,
+      latestReviewId: row.latestReviewId,
+    };
   }
 
   return map;
