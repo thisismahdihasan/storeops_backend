@@ -152,6 +152,7 @@ const safeDesignerDetailSelect = Prisma.validator<Prisma.ResearchItemSelect>()({
           comment: true,
           resolved: true,
           createdAt: true,
+          updatedAt: true,
           createdBy: {
             select: {
               id: true,
@@ -164,6 +165,7 @@ const safeDesignerDetailSelect = Prisma.validator<Prisma.ResearchItemSelect>()({
               id: true,
               message: true,
               createdAt: true,
+              updatedAt: true,
               createdBy: {
                 select: {
                   id: true,
@@ -240,14 +242,18 @@ export const getDesignDetail = async (
         y: annotation.y,
         comment: annotation.comment,
         createdAt: annotation.createdAt,
+        updatedAt: annotation.updatedAt,
         createdBy: {
+          id: annotation.createdBy.id,
           name: annotation.createdBy.name,
         },
         replies: annotation.replies.map((reply) => ({
           id: reply.id,
           message: reply.message,
           createdAt: reply.createdAt,
+          updatedAt: reply.updatedAt,
           createdBy: {
+            id: reply.createdBy.id,
             name: reply.createdBy.name,
           },
         })),

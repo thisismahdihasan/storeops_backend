@@ -27,6 +27,7 @@ const designerDetailResponse = {
     "assignment",
     "currentDesigner",
     "latestReview",
+    "reviewHistory",
     "latestIssue",
     "finalAssets",
   ],
@@ -72,12 +73,12 @@ const designerDetailResponse = {
           type: "array",
           items: {
             type: "object",
-            required: ["id", "x", "y", "comment", "resolved", "createdAt", "createdBy", "replies"],
+            required: ["id", "x", "y", "comment", "resolved", "createdAt", "updatedAt", "createdBy", "replies"],
             properties: {
               id: { type: "string" }, x: { type: "number" }, y: { type: "number" },
-              comment: { type: "string" }, resolved: { type: "boolean" }, createdAt: { type: "string", format: "date-time" },
+              comment: { type: "string" }, resolved: { type: "boolean" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" },
               createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } },
-              replies: { type: "array", items: { type: "object", required: ["id", "message", "createdAt", "createdBy"], properties: { id: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } },
+              replies: { type: "array", items: { type: "object", required: ["id", "message", "createdAt", "updatedAt", "createdBy"], properties: { id: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } },
             },
           },
         },
@@ -90,6 +91,40 @@ const designerDetailResponse = {
       properties: {
         id: { type: "string" }, reason: { $ref: "#/components/schemas/IssueReason" },
         details: { type: "string", nullable: true }, createdAt: { type: "string", format: "date-time" },
+      },
+    },
+    reviewHistory: {
+      type: "object",
+      required: ["previousReviews"],
+      properties: {
+        previousReviews: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "roundNumber", "imageUrl", "imageDeletedAt", "note", "submittedAt", "annotations"],
+            properties: {
+              id: { type: "string" },
+              roundNumber: { type: "integer" },
+              imageUrl: { type: "string", format: "uri", nullable: true, description: "Always null when imageDeletedAt is set." },
+              imageDeletedAt: { type: "string", format: "date-time", nullable: true },
+              note: { type: "string", nullable: true },
+              submittedAt: { type: "string", format: "date-time" },
+              annotations: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["id", "x", "y", "comment", "createdAt", "updatedAt", "createdBy", "replies"],
+                  properties: {
+                    id: { type: "string" }, x: { type: "number" }, y: { type: "number" },
+                    comment: { type: "string" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" },
+                    createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } },
+                    replies: { type: "array", items: { type: "object", required: ["id", "message", "createdAt", "updatedAt", "createdBy"], properties: { id: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     },
     finalAssets: {

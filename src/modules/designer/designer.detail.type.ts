@@ -10,6 +10,7 @@ export type DesignerDetailAnnotationReply = {
   id: string;
   message: string;
   createdAt: Date;
+  updatedAt: Date;
   createdBy: {
     id: string;
     name: string | null;
@@ -23,6 +24,7 @@ export type DesignerDetailAnnotation = {
   comment: string;
   resolved: boolean;
   createdAt: Date;
+  updatedAt: Date;
   createdBy: {
     id: string;
     name: string | null;
@@ -54,14 +56,18 @@ export type DesignWorkspaceReview = {
     y: number;
     comment: string;
     createdAt: Date;
+    updatedAt: Date;
     createdBy: {
+      id: string;
       name: string | null;
     };
     replies: Array<{
       id: string;
       message: string;
       createdAt: Date;
+      updatedAt: Date;
       createdBy: {
+        id: string;
         name: string | null;
       };
     }>;
