@@ -51,26 +51,32 @@ export const findLeastWorkloadLister = async (
     return eligibleMembers[0].userId;
   }
 
-  const workloadCounts: ListerWorkload[] = await Promise.all(
-    eligibleMembers.map(async (member) => {
-      const count = await tx.listingAssignment.count({
-        where: {
-          listerId: member.userId,
-          isCurrent: true,
-          researchItem: {
-            workspaceId,
-            status: { in: ACTIVE_LISTING_WORKLOAD_STATUSES },
-          },
-        },
-      });
+  // One grouped query replaces per-member counts. The where clause is the exact
+  // predicate previously applied per member: current assignments to eligible
+  // listers whose research item is in this workspace with an active status.
+  const workloadGroups = await tx.listingAssignment.groupBy({
+    by: ["listerId"],
+    where: {
+      listerId: { in: eligibleMembers.map((member) => member.userId) },
+      isCurrent: true,
+      researchItem: {
+        workspaceId,
+        status: { in: ACTIVE_LISTING_WORKLOAD_STATUSES },
+      },
+    },
+    _count: true,
+  });
 
-      return {
-        userId: member.userId,
-        createdAt: member.createdAt,
-        activeWorkload: count,
-      };
-    })
+  const workloadByLister = new Map(
+    workloadGroups.map((group) => [group.listerId, group._count])
   );
+
+  // Members with no active assignments are absent from the grouped result and count as 0.
+  const workloadCounts: ListerWorkload[] = eligibleMembers.map((member) => ({
+    userId: member.userId,
+    createdAt: member.createdAt,
+    activeWorkload: workloadByLister.get(member.userId) ?? 0,
+  }));
 
   workloadCounts.sort((a, b) => {
     if (a.activeWorkload !== b.activeWorkload) {
