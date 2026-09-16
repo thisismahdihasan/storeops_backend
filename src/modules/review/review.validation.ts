@@ -109,6 +109,57 @@ export type CreateAnnotationReplyBodyInput = z.infer<
   typeof createAnnotationReplyBodySchema
 >;
 
+export const annotationMutationParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    annotationId: z.string().trim().min(1, "annotationId is required"),
+  })
+  .strict();
+
+export type AnnotationMutationParamsInput = z.infer<
+  typeof annotationMutationParamsSchema
+>;
+
+export const annotationReplyMutationParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    annotationId: z.string().trim().min(1, "annotationId is required"),
+    replyId: z.string().trim().min(1, "replyId is required"),
+  })
+  .strict();
+
+export type AnnotationReplyMutationParamsInput = z.infer<
+  typeof annotationReplyMutationParamsSchema
+>;
+
+export const updateReviewAnnotationBodySchema = z
+  .object({
+    comment: z
+      .string({ message: "comment must be a string" })
+      .trim()
+      .min(1, "comment cannot be empty")
+      .max(2000, "comment cannot exceed 2000 characters"),
+  })
+  .strict();
+
+export type UpdateReviewAnnotationBodyInput = z.infer<
+  typeof updateReviewAnnotationBodySchema
+>;
+
+export const updateAnnotationReplyBodySchema = z
+  .object({
+    message: z
+      .string({ message: "message must be a string" })
+      .trim()
+      .min(1, "message cannot be empty")
+      .max(2000, "message cannot exceed 2000 characters"),
+  })
+  .strict();
+
+export type UpdateAnnotationReplyBodyInput = z.infer<
+  typeof updateAnnotationReplyBodySchema
+>;
+
 export const requestCorrectionParamsSchema = z
   .object({
     workspaceId: z.string().trim().min(1, "workspaceId is required"),

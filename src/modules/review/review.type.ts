@@ -49,6 +49,7 @@ export type ReviewReplyDetail = {
   id: string;
   message: string;
   createdAt: Date;
+  updatedAt: Date;
   createdBy: {
     id: string;
     name: string | null;
@@ -62,6 +63,7 @@ export type ReviewAnnotationDetail = {
   comment: string;
   resolved: boolean;
   createdAt: Date;
+  updatedAt: Date;
   createdBy: {
     id: string;
     name: string | null;
@@ -114,11 +116,20 @@ export type ReviewAnnotationItem = {
   comment: string;
   resolved: boolean;
   createdAt: Date;
+  updatedAt: Date;
   createdBy: ReviewAnnotationCreatedBy;
 };
 
 export type CreateReviewAnnotationResult = {
   annotation: ReviewAnnotationItem;
+};
+
+export type UpdateReviewAnnotationResult = {
+  annotation: ReviewAnnotationItem;
+};
+
+export type DeleteReviewAnnotationResult = {
+  annotationId: string;
 };
 
 export type AnnotationReplyCreatedBy = {
@@ -131,11 +142,20 @@ export type AnnotationReplyItem = {
   annotationId: string;
   message: string;
   createdAt: Date;
+  updatedAt: Date;
   createdBy: AnnotationReplyCreatedBy;
 };
 
 export type CreateAnnotationReplyResult = {
   reply: AnnotationReplyItem;
+};
+
+export type UpdateAnnotationReplyResult = {
+  reply: AnnotationReplyItem;
+};
+
+export type DeleteAnnotationReplyResult = {
+  replyId: string;
 };
 
 export const NOTIFICATION_TYPE_DESIGN_CORRECTION_REQUESTED =

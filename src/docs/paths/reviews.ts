@@ -20,12 +20,12 @@ const reviewHistoryItem = () => ({
     id: { type: "string" }, roundNumber: { type: "integer" }, imageUrl: { type: "string", format: "uri", nullable: true },
     imageDeletedAt: { type: "string", format: "date-time", nullable: true }, note: { type: "string", nullable: true },
     submittedAt: { type: "string", format: "date-time" }, approvedAt: { type: "string", format: "date-time", nullable: true }, approvedById: { type: "string", nullable: true },
-    annotations: { type: "array", items: { type: "object", required: ["id", "x", "y", "comment", "resolved", "createdAt", "createdBy", "replies"], properties: {
+    annotations: { type: "array", items: { type: "object", required: ["id", "x", "y", "comment", "resolved", "createdAt", "updatedAt", "createdBy", "replies"], properties: {
       id: { type: "string" }, x: { type: "number", minimum: 0, maximum: 1 }, y: { type: "number", minimum: 0, maximum: 1 },
-      comment: { type: "string" }, resolved: { type: "boolean" }, createdAt: { type: "string", format: "date-time" },
+      comment: { type: "string" }, resolved: { type: "boolean" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" },
       createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } },
-      replies: { type: "array", items: { type: "object", required: ["id", "message", "createdAt", "createdBy"], properties: {
-        id: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" },
+      replies: { type: "array", items: { type: "object", required: ["id", "message", "createdAt", "updatedAt", "createdBy"], properties: {
+        id: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" },
         createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } },
       } } },
     } } },
@@ -92,7 +92,7 @@ export const reviewPaths: OpenApiPathMap = {
       description: "ADMIN only. The coordinates are normalized from 0 through 1; annotations are permitted only on the latest DESIGN_REVIEW round.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/ReviewId" }],
       requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["x", "y", "comment"], properties: { x: { type: "number", minimum: 0, maximum: 1 }, y: { type: "number", minimum: 0, maximum: 1 }, comment: { type: "string", minLength: 1, maxLength: 2000 } } } } } },
-      responses: { "201": jsonSuccess("Review annotation created successfully.", { type: "object", required: ["annotation"], properties: { annotation: { type: "object", required: ["id", "reviewSubmissionId", "x", "y", "comment", "resolved", "createdAt", "createdBy"], properties: { id: { type: "string" }, reviewSubmissionId: { type: "string" }, x: { type: "number" }, y: { type: "number" }, comment: { type: "string" }, resolved: { type: "boolean", enum: [false] }, createdAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } } }), "400": jsonError("Invalid annotation body."), ...adminWorkflowErrors },
+      responses: { "201": jsonSuccess("Review annotation created successfully.", { type: "object", required: ["annotation"], properties: { annotation: { type: "object", required: ["id", "reviewSubmissionId", "x", "y", "comment", "resolved", "createdAt", "updatedAt", "createdBy"], properties: { id: { type: "string" }, reviewSubmissionId: { type: "string" }, x: { type: "number" }, y: { type: "number" }, comment: { type: "string" }, resolved: { type: "boolean", enum: [false] }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } } }), "400": jsonError("Invalid annotation body."), ...adminWorkflowErrors },
     },
   },
   "/api/v1/workspaces/{workspaceId}/reviews/{reviewId}/request-correction": {
@@ -115,7 +115,37 @@ export const reviewPaths: OpenApiPathMap = {
       description: "ADMIN may reply; DESIGNER must be the current assignee. Replies are allowed on the latest round while status is DESIGN_REVIEW, CORRECTION_NEEDED, or DESIGN_IN_PROGRESS.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/AnnotationId" }],
       requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["message"], properties: { message: { type: "string", minLength: 1, maxLength: 2000 } } } } } },
-      responses: { "201": jsonSuccess("Annotation reply created successfully.", { type: "object", required: ["reply"], properties: { reply: { type: "object", required: ["id", "annotationId", "message", "createdAt", "createdBy"], properties: { id: { type: "string" }, annotationId: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } } }), "400": jsonError("Invalid reply body."), "401": jsonError("Authentication is required."), "403": jsonError("Workspace role or current assignment is insufficient."), "404": jsonError("Annotation was not found."), "409": jsonError("The annotation is not on the current eligible review round.") },
+      responses: { "201": jsonSuccess("Annotation reply created successfully.", { type: "object", required: ["reply"], properties: { reply: { type: "object", required: ["id", "annotationId", "message", "createdAt", "updatedAt", "createdBy"], properties: { id: { type: "string" }, annotationId: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, createdBy: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } } }), "400": jsonError("Invalid reply body."), "401": jsonError("Authentication is required."), "403": jsonError("Workspace role or current assignment is insufficient."), "404": jsonError("Annotation was not found."), "409": jsonError("The annotation is not on the current eligible review round.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/annotations/{annotationId}": {
+    patch: {
+      tags: ["Reviews"], summary: "Edit an owned annotation", security: [{ cookieAuth: [] }],
+      description: "Creator only; no ADMIN override. Annotations are immutable after Request Correction, approval, or when their review round is historical.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/AnnotationId" }],
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["comment"], properties: { comment: { type: "string", minLength: 1, maxLength: 2000 } } } } } },
+      responses: { "200": jsonSuccess("Review annotation updated successfully.", { type: "object", required: ["annotation"], properties: { annotation: { type: "object", required: ["id", "reviewSubmissionId", "x", "y", "comment", "resolved", "createdAt", "updatedAt", "createdBy"], properties: { id: { type: "string" }, reviewSubmissionId: { type: "string" }, x: { type: "number" }, y: { type: "number" }, comment: { type: "string" }, resolved: { type: "boolean" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, createdBy: { type: "object", properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } } }), "400": jsonError("Invalid annotation body."), "401": jsonError("Authentication is required."), "403": jsonError("Only the annotation creator may edit it."), "404": jsonError("Annotation was not found in this workspace."), "409": jsonError("Annotation is not on the current DESIGN_REVIEW round.") },
+    },
+    delete: {
+      tags: ["Reviews"], summary: "Delete an owned annotation", security: [{ cookieAuth: [] }],
+      description: "Creator only; no ADMIN override. Deletion is blocked when the annotation has replies and is unavailable after Request Correction, approval, or when historical.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/AnnotationId" }],
+      responses: { "200": jsonSuccess("Review annotation deleted successfully.", { type: "object", required: ["annotationId"], properties: { annotationId: { type: "string" } } }), "401": jsonError("Authentication is required."), "403": jsonError("Only the annotation creator may delete it."), "404": jsonError("Annotation was not found in this workspace."), "409": jsonError("Annotation is locked or has replies.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/annotations/{annotationId}/replies/{replyId}": {
+    patch: {
+      tags: ["Reviews"], summary: "Edit an owned annotation reply", security: [{ cookieAuth: [] }],
+      description: "ADMIN or current assigned DESIGNER may edit only their own reply. Replies are immutable on historical or terminal rounds.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/AnnotationId" }, { name: "replyId", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["message"], properties: { message: { type: "string", minLength: 1, maxLength: 2000 } } } } } },
+      responses: { "200": jsonSuccess("Annotation reply updated successfully.", { type: "object", required: ["reply"], properties: { reply: { type: "object", required: ["id", "annotationId", "message", "createdAt", "updatedAt", "createdBy"], properties: { id: { type: "string" }, annotationId: { type: "string" }, message: { type: "string" }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, createdBy: { type: "object", properties: { id: { type: "string" }, name: { type: "string", nullable: true } } } } } } }), "400": jsonError("Invalid reply body."), "401": jsonError("Authentication is required."), "403": jsonError("Only the reply creator may edit it."), "404": jsonError("Reply was not found in this workspace annotation."), "409": jsonError("Reply is not on the current eligible review round.") },
+    },
+    delete: {
+      tags: ["Reviews"], summary: "Delete an owned annotation reply", security: [{ cookieAuth: [] }],
+      description: "ADMIN or current assigned DESIGNER may delete only their own reply. Replies are immutable on historical or terminal rounds.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/AnnotationId" }, { name: "replyId", in: "path", required: true, schema: { type: "string" } }],
+      responses: { "200": jsonSuccess("Annotation reply deleted successfully.", { type: "object", required: ["replyId"], properties: { replyId: { type: "string" } } }), "401": jsonError("Authentication is required."), "403": jsonError("Only the reply creator may delete it."), "404": jsonError("Reply was not found in this workspace annotation."), "409": jsonError("Reply is not on the current eligible review round.") },
     },
   },
 };

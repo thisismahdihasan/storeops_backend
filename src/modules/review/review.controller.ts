@@ -9,11 +9,15 @@ import {
   createAnnotationReplyParamsSchema,
   createReviewAnnotationBodySchema,
   createReviewAnnotationParamsSchema,
+  annotationMutationParamsSchema,
+  annotationReplyMutationParamsSchema,
   requestCorrectionBodySchema,
   requestCorrectionParamsSchema,
   getReviewDetailParamsSchema,
   getReviewQueueParamsSchema,
   getReviewQueueQuerySchema,
+  updateAnnotationReplyBodySchema,
+  updateReviewAnnotationBodySchema,
 } from "./review.validation.js";
 
 // Returns review submissions currently awaiting ADMIN action.
@@ -100,6 +104,94 @@ export const createAnnotationReply = async (
   ApiResponse.success(res, {
     statusCode: 201,
     message: "Annotation reply created successfully",
+    data: result,
+  });
+};
+
+export const updateReviewAnnotation = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, annotationId } = annotationMutationParamsSchema.parse(
+    req.params
+  );
+  const body = updateReviewAnnotationBodySchema.parse(req.body);
+  const result = await reviewService.updateReviewAnnotation(
+    workspaceId,
+    annotationId,
+    authReq.user.id,
+    body
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Review annotation updated successfully",
+    data: result,
+  });
+};
+
+export const deleteReviewAnnotation = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, annotationId } = annotationMutationParamsSchema.parse(
+    req.params
+  );
+  const result = await reviewService.deleteReviewAnnotation(
+    workspaceId,
+    annotationId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Review annotation deleted successfully",
+    data: result,
+  });
+};
+
+export const updateAnnotationReply = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, annotationId, replyId } =
+    annotationReplyMutationParamsSchema.parse(req.params);
+  const body = updateAnnotationReplyBodySchema.parse(req.body);
+  const result = await reviewService.updateAnnotationReply(
+    workspaceId,
+    annotationId,
+    replyId,
+    authReq.user.id,
+    body
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Annotation reply updated successfully",
+    data: result,
+  });
+};
+
+export const deleteAnnotationReply = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, annotationId, replyId } =
+    annotationReplyMutationParamsSchema.parse(req.params);
+  const result = await reviewService.deleteAnnotationReply(
+    workspaceId,
+    annotationId,
+    replyId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Annotation reply deleted successfully",
     data: result,
   });
 };

@@ -5,16 +5,22 @@ import {
   ApproveReviewResult,
   CreateAnnotationReplyResult,
   CreateReviewAnnotationResult,
+  DeleteAnnotationReplyResult,
+  DeleteReviewAnnotationResult,
   ReviewDetailResult,
   ReviewQueueResult,
   NOTIFICATION_TYPE_DESIGN_APPROVED,
   NOTIFICATION_TYPE_DESIGN_CORRECTION_REQUESTED,
   RequestCorrectionResult,
+  UpdateAnnotationReplyResult,
+  UpdateReviewAnnotationResult,
 } from "./review.type.js";
 import {
   CreateAnnotationReplyBodyInput,
   CreateReviewAnnotationBodyInput,
   GetReviewQueueQueryInput,
+  UpdateAnnotationReplyBodyInput,
+  UpdateReviewAnnotationBodyInput,
 } from "./review.validation.js";
 
 const safeReviewUserSelect = {
@@ -41,6 +47,7 @@ const safeReviewHistorySelect = Prisma.validator<Prisma.ReviewSubmissionSelect>(
       comment: true,
       resolved: true,
       createdAt: true,
+      updatedAt: true,
       createdBy: {
         select: {
           id: true,
@@ -53,6 +60,7 @@ const safeReviewHistorySelect = Prisma.validator<Prisma.ReviewSubmissionSelect>(
           id: true,
           message: true,
           createdAt: true,
+          updatedAt: true,
           createdBy: {
             select: {
               id: true,
@@ -265,6 +273,122 @@ export const ALLOWED_ANNOTATION_REPLY_STATUSES = [
 export type AllowedAnnotationReplyStatus =
   (typeof ALLOWED_ANNOTATION_REPLY_STATUSES)[number];
 
+const assertLatestReviewRound = async (
+  tx: Prisma.TransactionClient,
+  researchItemId: string,
+  reviewSubmissionId: string,
+  message: string
+): Promise<void> => {
+  const latestReview = await tx.reviewSubmission.findFirst({
+    where: { researchItemId },
+    orderBy: { roundNumber: "desc" },
+    select: { id: true },
+  });
+
+  if (!latestReview || latestReview.id !== reviewSubmissionId) {
+    throw new ApiError(409, message);
+  }
+};
+
+const assertAnnotationWorkflowGate = async (
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  researchItemId: string,
+  reviewSubmissionId: string
+): Promise<void> => {
+  const item = await tx.researchItem.findFirst({
+    where: { id: researchItemId, workspaceId },
+    select: { status: true },
+  });
+
+  if (!item || item.status !== ResearchStatus.DESIGN_REVIEW) {
+    throw new ApiError(409, "Annotation is no longer editable on this review");
+  }
+
+  await assertLatestReviewRound(
+    tx,
+    researchItemId,
+    reviewSubmissionId,
+    "Annotations can only be changed on the current review round"
+  );
+};
+
+const assertAnnotationEditor = async (
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  userId: string
+): Promise<void> => {
+  const member = await tx.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+    select: { roles: true },
+  });
+
+  if (!member || !member.roles.includes(WorkspaceRole.ADMIN)) {
+    throw new ApiError(403, "Insufficient workspace permissions");
+  }
+};
+
+const assertReplyWorkflowGate = async (
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  researchItemId: string,
+  reviewSubmissionId: string
+): Promise<void> => {
+  const item = await tx.researchItem.findFirst({
+    where: { id: researchItemId, workspaceId },
+    select: { status: true },
+  });
+
+  if (
+    !item ||
+    !(ALLOWED_ANNOTATION_REPLY_STATUSES as readonly ResearchStatus[]).includes(
+      item.status
+    )
+  ) {
+    throw new ApiError(409, "Reply is no longer editable on this review");
+  }
+
+  await assertLatestReviewRound(
+    tx,
+    researchItemId,
+    reviewSubmissionId,
+    "Replies can only be changed on the current review round"
+  );
+};
+
+const assertReplyParticipant = async (
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  researchItemId: string,
+  userId: string
+): Promise<void> => {
+  const member = await tx.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+    select: { roles: true },
+  });
+
+  if (!member) {
+    throw new ApiError(403, "You do not have access to this workspace");
+  }
+
+  const isAdmin = member.roles.includes(WorkspaceRole.ADMIN);
+  const isDesigner = member.roles.includes(WorkspaceRole.DESIGNER);
+  if (!isAdmin && !isDesigner) {
+    throw new ApiError(403, "Insufficient workspace permissions");
+  }
+
+  if (!isAdmin) {
+    const currentAssignment = await tx.designAssignment.findFirst({
+      where: { researchItemId, isCurrent: true },
+      select: { designerId: true },
+    });
+
+    if (!currentAssignment || currentAssignment.designerId !== userId) {
+      throw new ApiError(403, "You are not assigned to this research item");
+    }
+  }
+};
+
 // Atomically creates an annotation on the current active review round for an admin.
 export const createReviewAnnotation = async (
   workspaceId: string,
@@ -350,6 +474,7 @@ export const createReviewAnnotation = async (
           comment: true,
           resolved: true,
           createdAt: true,
+          updatedAt: true,
           createdBy: {
             select: {
               id: true,
@@ -508,6 +633,7 @@ export const createAnnotationReply = async (
           annotationId: true,
           message: true,
           createdAt: true,
+          updatedAt: true,
           createdBy: {
             select: {
               id: true,
@@ -525,6 +651,355 @@ export const createAnnotationReply = async (
       maxWait: 10000,
       timeout: 15000,
     }
+  );
+};
+
+// Updates an owned annotation only while its latest review remains actionable.
+export const updateReviewAnnotation = async (
+  workspaceId: string,
+  annotationId: string,
+  userId: string,
+  input: UpdateReviewAnnotationBodyInput
+): Promise<UpdateReviewAnnotationResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      const annotation = await tx.reviewAnnotation.findFirst({
+        where: {
+          id: annotationId,
+          reviewSubmission: { researchItem: { workspaceId } },
+        },
+        select: {
+          id: true,
+          createdById: true,
+          reviewSubmissionId: true,
+          reviewSubmission: { select: { researchItemId: true } },
+        },
+      });
+
+      if (!annotation) throw new ApiError(404, "Annotation not found");
+      if (annotation.createdById !== userId) {
+        throw new ApiError(403, "You can only edit your own annotation");
+      }
+      await assertAnnotationEditor(tx, workspaceId, userId);
+
+      await assertAnnotationWorkflowGate(
+        tx,
+        workspaceId,
+        annotation.reviewSubmission.researchItemId,
+        annotation.reviewSubmissionId
+      );
+
+      const updated = await tx.reviewAnnotation.updateMany({
+        where: {
+          id: annotation.id,
+          createdById: userId,
+          reviewSubmission: {
+            id: annotation.reviewSubmissionId,
+            researchItem: { workspaceId, status: ResearchStatus.DESIGN_REVIEW },
+          },
+        },
+        data: { comment: input.comment.trim(), updatedAt: new Date() },
+      });
+
+      if (updated.count !== 1) {
+        await assertAnnotationWorkflowGate(
+          tx,
+          workspaceId,
+          annotation.reviewSubmission.researchItemId,
+          annotation.reviewSubmissionId
+        );
+        throw new ApiError(409, "Annotation is no longer editable on this review");
+      }
+
+      await assertAnnotationWorkflowGate(
+        tx,
+        workspaceId,
+        annotation.reviewSubmission.researchItemId,
+        annotation.reviewSubmissionId
+      );
+
+      const updatedAnnotation = await tx.reviewAnnotation.findUnique({
+        where: { id: annotation.id },
+        select: {
+          id: true,
+          reviewSubmissionId: true,
+          x: true,
+          y: true,
+          comment: true,
+          resolved: true,
+          createdAt: true,
+          updatedAt: true,
+          createdBy: { select: { id: true, name: true } },
+        },
+      });
+
+      if (!updatedAnnotation) throw new ApiError(404, "Annotation not found");
+      return { annotation: updatedAnnotation };
+    },
+    { maxWait: 10000, timeout: 15000 }
+  );
+};
+
+// Hard-deletes an owned annotation only when no reply can be lost.
+export const deleteReviewAnnotation = async (
+  workspaceId: string,
+  annotationId: string,
+  userId: string
+): Promise<DeleteReviewAnnotationResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      const annotation = await tx.reviewAnnotation.findFirst({
+        where: {
+          id: annotationId,
+          reviewSubmission: { researchItem: { workspaceId } },
+        },
+        select: {
+          id: true,
+          createdById: true,
+          reviewSubmissionId: true,
+          reviewSubmission: { select: { researchItemId: true } },
+        },
+      });
+
+      if (!annotation) throw new ApiError(404, "Annotation not found");
+      if (annotation.createdById !== userId) {
+        throw new ApiError(403, "You can only delete your own annotation");
+      }
+      await assertAnnotationEditor(tx, workspaceId, userId);
+
+      await assertAnnotationWorkflowGate(
+        tx,
+        workspaceId,
+        annotation.reviewSubmission.researchItemId,
+        annotation.reviewSubmissionId
+      );
+
+      const replyCount = await tx.annotationReply.count({
+        where: { annotationId: annotation.id },
+      });
+      if (replyCount > 0) {
+        throw new ApiError(409, "Annotations with replies cannot be deleted");
+      }
+
+      const deleted = await tx.reviewAnnotation.deleteMany({
+        where: {
+          id: annotation.id,
+          createdById: userId,
+          replies: { none: {} },
+          reviewSubmission: {
+            id: annotation.reviewSubmissionId,
+            researchItem: { workspaceId, status: ResearchStatus.DESIGN_REVIEW },
+          },
+        },
+      });
+
+      if (deleted.count !== 1) {
+        const remainingReplies = await tx.annotationReply.count({
+          where: { annotationId: annotation.id },
+        });
+        if (remainingReplies > 0) {
+          throw new ApiError(409, "Annotations with replies cannot be deleted");
+        }
+        await assertAnnotationWorkflowGate(
+          tx,
+          workspaceId,
+          annotation.reviewSubmission.researchItemId,
+          annotation.reviewSubmissionId
+        );
+        throw new ApiError(404, "Annotation not found");
+      }
+
+      await assertAnnotationWorkflowGate(
+        tx,
+        workspaceId,
+        annotation.reviewSubmission.researchItemId,
+        annotation.reviewSubmissionId
+      );
+
+      return { annotationId: annotation.id };
+    },
+    { maxWait: 10000, timeout: 15000 }
+  );
+};
+
+// Updates an owned reply while the current review conversation remains open.
+export const updateAnnotationReply = async (
+  workspaceId: string,
+  annotationId: string,
+  replyId: string,
+  userId: string,
+  input: UpdateAnnotationReplyBodyInput
+): Promise<UpdateAnnotationReplyResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      const reply = await tx.annotationReply.findFirst({
+        where: {
+          id: replyId,
+          annotationId,
+          annotation: { reviewSubmission: { researchItem: { workspaceId } } },
+        },
+        select: {
+          id: true,
+          createdById: true,
+          annotationId: true,
+          annotation: {
+            select: {
+              reviewSubmissionId: true,
+              reviewSubmission: { select: { researchItemId: true } },
+            },
+          },
+        },
+      });
+
+      if (!reply) throw new ApiError(404, "Annotation reply not found");
+      if (reply.createdById !== userId) {
+        throw new ApiError(403, "You can only edit your own reply");
+      }
+
+      const researchItemId = reply.annotation.reviewSubmission.researchItemId;
+      const reviewSubmissionId = reply.annotation.reviewSubmissionId;
+      await assertReplyParticipant(tx, workspaceId, researchItemId, userId);
+      await assertReplyWorkflowGate(
+        tx,
+        workspaceId,
+        researchItemId,
+        reviewSubmissionId
+      );
+
+      const updated = await tx.annotationReply.updateMany({
+        where: {
+          id: reply.id,
+          annotationId,
+          createdById: userId,
+          annotation: {
+            reviewSubmission: {
+              id: reviewSubmissionId,
+              researchItem: {
+                workspaceId,
+                status: { in: [...ALLOWED_ANNOTATION_REPLY_STATUSES] },
+              },
+            },
+          },
+        },
+        data: { message: input.message.trim(), updatedAt: new Date() },
+      });
+
+      if (updated.count !== 1) {
+        await assertReplyWorkflowGate(
+          tx,
+          workspaceId,
+          researchItemId,
+          reviewSubmissionId
+        );
+        throw new ApiError(409, "Reply is no longer editable on this review");
+      }
+
+      await assertReplyWorkflowGate(
+        tx,
+        workspaceId,
+        researchItemId,
+        reviewSubmissionId
+      );
+
+      const updatedReply = await tx.annotationReply.findUnique({
+        where: { id: reply.id },
+        select: {
+          id: true,
+          annotationId: true,
+          message: true,
+          createdAt: true,
+          updatedAt: true,
+          createdBy: { select: { id: true, name: true } },
+        },
+      });
+
+      if (!updatedReply) throw new ApiError(404, "Annotation reply not found");
+      return { reply: updatedReply };
+    },
+    { maxWait: 10000, timeout: 15000 }
+  );
+};
+
+// Hard-deletes only the caller's reply from an open current review conversation.
+export const deleteAnnotationReply = async (
+  workspaceId: string,
+  annotationId: string,
+  replyId: string,
+  userId: string
+): Promise<DeleteAnnotationReplyResult> => {
+  return await prisma.$transaction(
+    async (tx) => {
+      const reply = await tx.annotationReply.findFirst({
+        where: {
+          id: replyId,
+          annotationId,
+          annotation: { reviewSubmission: { researchItem: { workspaceId } } },
+        },
+        select: {
+          id: true,
+          createdById: true,
+          annotationId: true,
+          annotation: {
+            select: {
+              reviewSubmissionId: true,
+              reviewSubmission: { select: { researchItemId: true } },
+            },
+          },
+        },
+      });
+
+      if (!reply) throw new ApiError(404, "Annotation reply not found");
+      if (reply.createdById !== userId) {
+        throw new ApiError(403, "You can only delete your own reply");
+      }
+
+      const researchItemId = reply.annotation.reviewSubmission.researchItemId;
+      const reviewSubmissionId = reply.annotation.reviewSubmissionId;
+      await assertReplyParticipant(tx, workspaceId, researchItemId, userId);
+      await assertReplyWorkflowGate(
+        tx,
+        workspaceId,
+        researchItemId,
+        reviewSubmissionId
+      );
+
+      const deleted = await tx.annotationReply.deleteMany({
+        where: {
+          id: reply.id,
+          annotationId,
+          createdById: userId,
+          annotation: {
+            reviewSubmission: {
+              id: reviewSubmissionId,
+              researchItem: {
+                workspaceId,
+                status: { in: [...ALLOWED_ANNOTATION_REPLY_STATUSES] },
+              },
+            },
+          },
+        },
+      });
+
+      if (deleted.count !== 1) {
+        await assertReplyWorkflowGate(
+          tx,
+          workspaceId,
+          researchItemId,
+          reviewSubmissionId
+        );
+        throw new ApiError(404, "Annotation reply not found");
+      }
+
+      await assertReplyWorkflowGate(
+        tx,
+        workspaceId,
+        researchItemId,
+        reviewSubmissionId
+      );
+
+      return { replyId: reply.id };
+    },
+    { maxWait: 10000, timeout: 15000 }
   );
 };
 

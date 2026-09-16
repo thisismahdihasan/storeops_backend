@@ -7,9 +7,13 @@ import {
   approveReviewSubmission,
   createAnnotationReply,
   createReviewAnnotation,
+  deleteAnnotationReply,
+  deleteReviewAnnotation,
   requestReviewCorrection,
   getReviewDetail,
   getReviewQueue,
+  updateAnnotationReply,
+  updateReviewAnnotation,
 } from "./review.controller.js";
 
 const reviewRouter: Router = Router({ mergeParams: true });
@@ -51,11 +55,39 @@ reviewRouter.post(
 
 const annotationRouter: Router = Router({ mergeParams: true });
 
+annotationRouter.patch(
+  "/:annotationId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(updateReviewAnnotation)
+);
+
+annotationRouter.delete(
+  "/:annotationId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(deleteReviewAnnotation)
+);
+
 annotationRouter.post(
   "/:annotationId/replies",
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.DESIGNER),
   catchAsync(createAnnotationReply)
+);
+
+annotationRouter.patch(
+  "/:annotationId/replies/:replyId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.DESIGNER),
+  catchAsync(updateAnnotationReply)
+);
+
+annotationRouter.delete(
+  "/:annotationId/replies/:replyId",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.DESIGNER),
+  catchAsync(deleteAnnotationReply)
 );
 
 export const ReviewRoutes = reviewRouter;

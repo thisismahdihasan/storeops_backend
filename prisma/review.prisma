@@ -32,6 +32,7 @@ model ReviewAnnotation {
   comment            String
   resolved           Boolean  @default(false)
   createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt @default(now())
 
   reviewSubmission ReviewSubmission  @relation(fields: [reviewSubmissionId], references: [id], onDelete: Cascade)
   createdBy        User              @relation(fields: [createdById], references: [id], onDelete: Restrict)
@@ -48,6 +49,7 @@ model AnnotationReply {
   createdById  String
   message      String
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt @default(now())
 
   annotation ReviewAnnotation @relation(fields: [annotationId], references: [id], onDelete: Cascade)
   createdBy  User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
