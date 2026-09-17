@@ -41,7 +41,7 @@ const upload = multer({
         return cb(
           new ApiError(
             400,
-            `Unsupported file type "${ext}". Allowed types: .zip, .png, .jpg, .jpeg, .webp, .pdf`
+            `Unsupported file type "${ext}". Allowed type: .zip`
           )
         );
       }
@@ -103,7 +103,7 @@ export const finalAssetsUploadMiddleware = (
           return next(
             new ApiError(
               400,
-              `Cannot upload more than ${MAX_FINAL_ASSET_FILES} files at once`
+              "Exactly one final asset file is required"
             )
           );
         }
@@ -118,18 +118,9 @@ export const finalAssetsUploadMiddleware = (
     }
 
     const files = req.files as Express.Multer.File[] | undefined;
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      return next(new ApiError(400, "At least one final asset file is required"));
-    }
-
-    if (files.length > MAX_FINAL_ASSET_FILES) {
+    if (!files || !Array.isArray(files) || files.length !== MAX_FINAL_ASSET_FILES) {
       await cleanupTempFiles();
-      return next(
-        new ApiError(
-          400,
-          `Cannot upload more than ${MAX_FINAL_ASSET_FILES} files at once`
-        )
-      );
+      return next(new ApiError(400, "Exactly one final asset file is required"));
     }
 
     // Enforce accepted field names: files or file

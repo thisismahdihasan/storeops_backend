@@ -166,6 +166,33 @@ export const openApiComponents = {
         profileImageUrl: { type: "string", format: "uri", nullable: true },
       },
     },
+    ListingDetailPerson: {
+      type: "object",
+      required: ["id", "name", "profileImageUrl"],
+      properties: {
+        id: stringId,
+        name: { type: "string", nullable: true },
+        profileImageUrl: { type: "string", format: "uri", nullable: true },
+      },
+    },
+    NullableListingDetailPerson: {
+      type: "object",
+      nullable: true,
+      required: ["id", "name", "profileImageUrl"],
+      properties: {
+        id: stringId,
+        name: { type: "string", nullable: true },
+        profileImageUrl: { type: "string", format: "uri", nullable: true },
+      },
+    },
+    ListerQueueCreator: {
+      type: "object",
+      required: ["id", "name"],
+      properties: {
+        id: stringId,
+        name: { type: "string", nullable: true },
+      },
+    },
     WorkspaceSummary: {
       type: "object",
       required: ["id", "name", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled"],
@@ -267,7 +294,7 @@ export const openApiComponents = {
           enum: ["READY_FOR_LISTING", "LISTING_IN_PROGRESS"],
         },
         createdAt: dateTime,
-        createdBy: { $ref: "#/components/schemas/CreatedBySummary" },
+        createdBy: { $ref: "#/components/schemas/ListerQueueCreator" },
       },
     },
     ListingDetailResearchItem: {

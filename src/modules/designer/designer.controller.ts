@@ -199,8 +199,8 @@ export const uploadFinalAssets = async (
   );
 
   const rawFiles = req.files as Express.Multer.File[] | undefined;
-  if (!rawFiles || !Array.isArray(rawFiles) || rawFiles.length === 0) {
-    throw new ApiError(400, "At least one final asset file is required");
+  if (!rawFiles || !Array.isArray(rawFiles) || rawFiles.length !== 1) {
+    throw new ApiError(400, "Exactly one final asset file is required");
   }
 
   const incomingFiles: FinalAssetIncomingFile[] = rawFiles.map((f) => ({

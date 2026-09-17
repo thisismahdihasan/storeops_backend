@@ -59,7 +59,6 @@ export const safeListerWorkQueueSelect = {
         select: {
           id: true,
           name: true,
-          email: true,
         },
       },
       reviewSubmissions: {
@@ -212,7 +211,7 @@ export const getListerListingDetail = async (
         select: {
           id: true,
           name: true,
-          email: true,
+          profileImageUrl: true,
         },
       },
       designAssignments: {
@@ -224,7 +223,7 @@ export const getListerListingDetail = async (
             select: {
               id: true,
               name: true,
-              email: true,
+              profileImageUrl: true,
             },
           },
         },

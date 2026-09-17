@@ -239,17 +239,10 @@ export type UploadFinalAssetsParamsInput = z.infer<
   typeof uploadFinalAssetsParamsSchema
 >;
 
-export const MAX_FINAL_ASSET_FILES = 10;
+export const MAX_FINAL_ASSET_FILES = 1;
 export const MAX_FINAL_ASSET_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
 
-export const ALLOWED_FINAL_ASSET_EXTENSIONS = [
-  ".zip",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".webp",
-  ".pdf",
-] as const;
+export const ALLOWED_FINAL_ASSET_EXTENSIONS = [".zip"] as const;
 
 export type AllowedFinalAssetExtension =
   (typeof ALLOWED_FINAL_ASSET_EXTENSIONS)[number];
@@ -258,10 +251,6 @@ export const ALLOWED_FINAL_ASSET_MIMETYPES = [
   "application/zip",
   "application/x-zip-compressed",
   "application/octet-stream",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/pdf",
 ] as const;
 
 export type AllowedFinalAssetMimeType =
@@ -276,11 +265,6 @@ export const EXTENSION_MIME_MAP: Record<
     "application/x-zip-compressed",
     "application/octet-stream",
   ],
-  ".png": ["image/png"],
-  ".jpg": ["image/jpeg"],
-  ".jpeg": ["image/jpeg"],
-  ".webp": ["image/webp"],
-  ".pdf": ["application/pdf"],
 };
 
 // Sanitizes final asset filenames: strips path traversal and control characters, verifies non-empty.
@@ -322,7 +306,7 @@ export const validateFinalAssetFile = (file: {
   if (!ALLOWED_FINAL_ASSET_EXTENSIONS.includes(ext)) {
     throw new ApiError(
       400,
-      `Unsupported file type "${ext}". Allowed types: .zip, .png, .jpg, .jpeg, .webp, .pdf`
+      `Unsupported file type "${ext}". Allowed type: .zip`
     );
   }
 

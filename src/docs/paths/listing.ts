@@ -150,8 +150,8 @@ export const listingPaths: OpenApiPathMap = {
           ],
           properties: {
             researchItem: { $ref: "#/components/schemas/ListingDetailResearchItem" },
-            creator: { $ref: "#/components/schemas/CreatedBySummary" },
-            designer: { $ref: "#/components/schemas/NullableUserSummary" },
+            creator: { $ref: "#/components/schemas/ListingDetailPerson" },
+            designer: { $ref: "#/components/schemas/NullableListingDetailPerson" },
             listingAssignment: { $ref: "#/components/schemas/ListingAssignmentDetail" },
             approvedPreview: { $ref: "#/components/schemas/ListingApprovedPreview" },
             finalAssets: {

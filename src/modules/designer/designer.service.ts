@@ -1007,15 +1007,8 @@ export const uploadFinalAssets = async (
   storage: FinalAssetStorageOperations = r2FinalAssetStorage
 ): Promise<UploadFinalAssetsResult> => {
   // 1. Validate file inputs
-  if (!incomingFiles || incomingFiles.length === 0) {
-    throw new ApiError(400, "At least one final asset file is required");
-  }
-
-  if (incomingFiles.length > MAX_FINAL_ASSET_FILES) {
-    throw new ApiError(
-      400,
-      `Cannot upload more than ${MAX_FINAL_ASSET_FILES} files at once`
-    );
+  if (!incomingFiles || incomingFiles.length !== MAX_FINAL_ASSET_FILES) {
+    throw new ApiError(400, "Exactly one final asset file is required");
   }
 
   for (const file of incomingFiles) {

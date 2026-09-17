@@ -33,7 +33,6 @@ export type ListerQueueResearchItem = {
   createdBy: {
     id: string;
     name: string | null;
-    email: string;
   };
 };
 
@@ -111,10 +110,10 @@ export type AdminListingListResult = {
   pagination: PaginationMeta;
 };
 
-export type ListingUserSummary = {
+export type ListingDetailPerson = {
   id: string;
   name: string | null;
-  email: string;
+  profileImageUrl: string | null;
 };
 
 export type ListingApprovedPreview = {
@@ -144,8 +143,8 @@ export type ListerListingDetailResult = {
     createdAt: Date;
     updatedAt: Date;
   };
-  creator: ListingUserSummary;
-  designer: ListingUserSummary | null;
+  creator: ListingDetailPerson;
+  designer: ListingDetailPerson | null;
   listingAssignment: {
     id: string;
     assignedAt: Date;
