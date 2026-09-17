@@ -241,6 +241,13 @@ export type UploadFinalAssetsParamsInput = z.infer<
 
 export const MAX_FINAL_ASSET_FILES = 1;
 export const MAX_FINAL_ASSET_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
+// Temporary multipart policy: supports large production ZIPs while keeping the init response bounded.
+export const MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GiB
+export const MULTIPART_FINAL_ASSET_PART_SIZE_BYTES = 10 * 1024 * 1024; // 10 MiB
+export const MAX_MULTIPART_FINAL_ASSET_PARTS = Math.ceil(
+  MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES /
+    MULTIPART_FINAL_ASSET_PART_SIZE_BYTES
+);
 
 export const ALLOWED_FINAL_ASSET_EXTENSIONS = [".zip"] as const;
 
@@ -333,6 +340,111 @@ export const validateFinalAssetFile = (file: {
     mimeType: normalizedMime,
   };
 };
+
+// Validates the server-owned metadata needed to begin a direct multipart ZIP upload.
+export const validateMultipartFinalAssetFileName = (fileName: string): string => {
+  const sanitizedName = sanitizeFinalAssetFileName(fileName);
+  const extension = path.extname(sanitizedName).toLowerCase();
+
+  if (extension !== ".zip") {
+    throw new ApiError(400, "Final package must be a .zip file");
+  }
+
+  return sanitizedName;
+};
+
+export const multipartFinalAssetParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    researchItemId: z.string().trim().min(1, "researchItemId is required"),
+  })
+  .strict();
+
+export const initFinalAssetMultipartUploadBodySchema = z
+  .object({
+    fileName: z
+      .string({ message: "fileName is required" })
+      .trim()
+      .min(1, "fileName is required")
+      .max(255, "fileName cannot exceed 255 characters"),
+    fileSize: z
+      .number({ message: "fileSize is required" })
+      .int("fileSize must be an integer")
+      .positive("fileSize must be greater than zero")
+      .max(
+        MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES,
+        "fileSize exceeds the 1 GiB multipart ZIP limit"
+      ),
+  })
+  .strict();
+
+export const completeFinalAssetMultipartUploadBodySchema = z
+  .object({
+    sessionToken: z
+      .string({ message: "sessionToken is required" })
+      .trim()
+      .min(1, "sessionToken is required")
+      .max(4096, "sessionToken is invalid"),
+    parts: z
+      .array(
+        z
+          .object({
+            partNumber: z
+              .number()
+              .int("partNumber must be an integer")
+              .positive("partNumber must be positive")
+              .max(MAX_MULTIPART_FINAL_ASSET_PARTS),
+            eTag: z
+              .string({ message: "eTag is required" })
+              .trim()
+              .min(1, "eTag is required")
+              .max(512, "eTag is invalid"),
+          })
+          .strict()
+      )
+      .min(1, "At least one uploaded part is required")
+      .max(
+        MAX_MULTIPART_FINAL_ASSET_PARTS,
+        "Too many multipart upload parts"
+      ),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const partNumbers = new Set<number>();
+
+    value.parts.forEach((part, index) => {
+      if (partNumbers.has(part.partNumber)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Duplicate partNumber is not allowed",
+          path: ["parts", index, "partNumber"],
+        });
+      }
+      partNumbers.add(part.partNumber);
+    });
+  });
+
+export const abortFinalAssetMultipartUploadBodySchema = z
+  .object({
+    sessionToken: z
+      .string({ message: "sessionToken is required" })
+      .trim()
+      .min(1, "sessionToken is required")
+      .max(4096, "sessionToken is invalid"),
+  })
+  .strict();
+
+export type InitFinalAssetMultipartUploadBodyInput = z.infer<
+  typeof initFinalAssetMultipartUploadBodySchema
+>;
+
+export type CompleteFinalAssetMultipartUploadBodyInput = z.infer<
+  typeof completeFinalAssetMultipartUploadBodySchema
+>;
+
+export type AbortFinalAssetMultipartUploadBodyInput = z.infer<
+  typeof abortFinalAssetMultipartUploadBodySchema
+>;
 
 export const completeDesignParamsSchema = z
   .object({

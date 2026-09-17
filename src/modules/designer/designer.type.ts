@@ -152,6 +152,21 @@ export type FinalAssetIncomingFile = {
   size: number;
 };
 
+export type FinalAssetMultipartInitResult = {
+  sessionToken: string;
+  partSize: number;
+  partCount: number;
+  parts: Array<{
+    partNumber: number;
+    uploadUrl: string;
+  }>;
+};
+
+export type FinalAssetMultipartCompletePart = {
+  partNumber: number;
+  eTag: string;
+};
+
 export type CompleteDesignResult = {
   researchItem: {
     id: string;

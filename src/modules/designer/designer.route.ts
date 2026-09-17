@@ -13,6 +13,9 @@ import {
   submitDesignReview,
   uploadFinalAssets,
   completeDesign,
+  abortFinalAssetMultipartUpload,
+  completeFinalAssetMultipartUpload,
+  initFinalAssetMultipartUpload,
 } from "./designer.controller.js";
 import { reviewImageUploadMiddleware } from "./designer.upload.js";
 import { finalAssetsUploadMiddleware } from "./designer.final-asset-upload.js";
@@ -77,6 +80,27 @@ designRouter.post(
   requireWorkspaceRole(WorkspaceRole.DESIGNER),
   finalAssetsUploadMiddleware,
   catchAsync(uploadFinalAssets)
+);
+
+designRouter.post(
+  "/:researchItemId/final-assets/multipart/init",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(initFinalAssetMultipartUpload)
+);
+
+designRouter.post(
+  "/:researchItemId/final-assets/multipart/complete",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(completeFinalAssetMultipartUpload)
+);
+
+designRouter.post(
+  "/:researchItemId/final-assets/multipart/abort",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(abortFinalAssetMultipartUpload)
 );
 
 designRouter.post(

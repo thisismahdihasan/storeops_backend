@@ -10,11 +10,15 @@ import {
 } from "./designer.review-storage.js";
 import { FinalAssetIncomingFile } from "./designer.type.js";
 import {
+  abortFinalAssetMultipartUploadBodySchema,
   completeDesignBodySchema,
   completeDesignParamsSchema,
+  completeFinalAssetMultipartUploadBodySchema,
   getAdminDesignListQuerySchema,
   getDesignerWorkQueueQuerySchema,
   getDesignDetailParamsSchema,
+  initFinalAssetMultipartUploadBodySchema,
+  multipartFinalAssetParamsSchema,
   reportDesignIssueBodySchema,
   reportDesignIssueParamsSchema,
   startCorrectionBodySchema,
@@ -235,6 +239,81 @@ export const uploadFinalAssets = async (
       }
     }
   }
+};
+
+// Creates a signed, workspace-bound R2 multipart upload session for one approved final ZIP.
+export const initFinalAssetMultipartUpload = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = multipartFinalAssetParamsSchema.parse(
+    req.params
+  );
+  const input = initFinalAssetMultipartUploadBodySchema.parse(req.body);
+  const result = await designerService.initFinalAssetMultipartUpload(
+    workspaceId,
+    researchItemId,
+    authReq.user.id,
+    input
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Multipart final asset upload initialized successfully",
+    data: result,
+  });
+};
+
+// Verifies a signed multipart session and persists its completed, verified ZIP through the legacy-safe invariant.
+export const completeFinalAssetMultipartUpload = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = multipartFinalAssetParamsSchema.parse(
+    req.params
+  );
+  const input = completeFinalAssetMultipartUploadBodySchema.parse(req.body);
+  const result = await designerService.completeFinalAssetMultipartUpload(
+    workspaceId,
+    researchItemId,
+    authReq.user.id,
+    input
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Multipart final asset upload completed successfully",
+    data: result,
+  });
+};
+
+// Cancels an incomplete multipart upload without creating or changing a FinalAsset record.
+export const abortFinalAssetMultipartUpload = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const { workspaceId, researchItemId } = multipartFinalAssetParamsSchema.parse(
+    req.params
+  );
+  const { sessionToken } = abortFinalAssetMultipartUploadBodySchema.parse(
+    req.body
+  );
+
+  await designerService.abortFinalAssetMultipartUpload(
+    workspaceId,
+    researchItemId,
+    authReq.user.id,
+    sessionToken
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Multipart final asset upload aborted successfully",
+    data: {},
+  });
 };
 
 // Handles HTTP request for completing design work after final assets upload, transitioning status to READY_FOR_LISTING.

@@ -7,9 +7,15 @@ import {
   DESIGNER_QUEUE_ACTIVE_STATUSES,
   GetAdminDesignListQueryInput,
   GetDesignerWorkQueueQueryInput,
+  MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES,
+  MAX_MULTIPART_FINAL_ASSET_PARTS,
   MAX_FINAL_ASSET_FILES,
+  MULTIPART_FINAL_ASSET_PART_SIZE_BYTES,
   ReportDesignIssueBodyInput,
+  CompleteFinalAssetMultipartUploadBodyInput,
+  InitFinalAssetMultipartUploadBodyInput,
   validateFinalAssetFile,
+  validateMultipartFinalAssetFileName,
 } from "./designer.validation.js";
 import {
   AdminDesignListItem,
@@ -25,6 +31,8 @@ import {
   StartCorrectionResult,
   UploadFinalAssetsResult,
   CompleteDesignResult,
+  FinalAssetMultipartCompletePart,
+  FinalAssetMultipartInitResult,
 } from "./designer.type.js";
 import { DesignerDetailResult } from "./designer.detail.type.js";
 import {
@@ -37,19 +45,50 @@ import {
 import { assignLeastWorkloadLister } from "../listing/listing.assignment.js";
 import {
   buildFinalAssetKey,
+  abortMultipartUpload,
+  completeMultipartUpload,
+  createMultipartUpload,
   deleteObject,
+  getPresignedUploadPartUrl,
+  headObject,
   uploadObject,
+  AbortMultipartUploadInput,
+  CompleteMultipartUploadInput,
+  CreateMultipartUploadInput,
+  PresignedUploadPartInput,
   UploadObjectInput,
 } from "../storage/r2.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
+import {
+  signFinalAssetMultipartSession,
+  verifyFinalAssetMultipartSession,
+} from "./designer.multipart-session.js";
 
 type FinalAssetStorageOperations = {
   upload: (input: UploadObjectInput) => Promise<void>;
   remove: (storageKey: string) => Promise<void>;
 };
 
+type FinalAssetMultipartStorageOperations = {
+  createMultipartUpload: (input: CreateMultipartUploadInput) => Promise<string>;
+  getPresignedUploadPartUrl: (input: PresignedUploadPartInput) => Promise<string>;
+  completeMultipartUpload: (input: CompleteMultipartUploadInput) => Promise<void>;
+  abortMultipartUpload: (input: AbortMultipartUploadInput) => Promise<void>;
+  headObject: (storageKey: string) => Promise<{ contentLength: number | undefined }>;
+  remove: (storageKey: string) => Promise<void>;
+};
+
 const r2FinalAssetStorage: FinalAssetStorageOperations = {
   upload: uploadObject,
+  remove: deleteObject,
+};
+
+const r2FinalAssetMultipartStorage: FinalAssetMultipartStorageOperations = {
+  createMultipartUpload,
+  getPresignedUploadPartUrl,
+  completeMultipartUpload,
+  abortMultipartUpload,
+  headObject,
   remove: deleteObject,
 };
 
@@ -71,6 +110,152 @@ const rollbackUploadedFinalAssets = async (
       console.error("Failed to remove uploaded final asset during rollback");
     }
   }
+};
+
+type FinalAssetEligibilityClient = Pick<
+  typeof prisma,
+  "researchItem" | "designAssignment" | "reviewSubmission" | "finalAsset"
+>;
+
+type FinalAssetUploadEligibility = {
+  id: string;
+  status: ResearchStatus;
+};
+
+// Applies the authoritative final-package invariants shared by legacy and direct R2 upload paths.
+const assertFinalAssetUploadEligibility = async (
+  client: FinalAssetEligibilityClient,
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string
+): Promise<FinalAssetUploadEligibility> => {
+  const researchItem = await client.researchItem.findFirst({
+    where: {
+      id: researchItemId,
+      workspaceId,
+    },
+    select: {
+      id: true,
+      status: true,
+    },
+  });
+
+  if (!researchItem) {
+    throw new ApiError(404, "Research item not found");
+  }
+
+  if (researchItem.status !== ResearchStatus.DESIGN_APPROVED) {
+    throw new ApiError(
+      409,
+      `Cannot upload final assets for research item with status ${researchItem.status}`
+    );
+  }
+
+  const currentAssignment = await client.designAssignment.findFirst({
+    where: {
+      researchItemId,
+      isCurrent: true,
+    },
+    select: {
+      designerId: true,
+    },
+  });
+
+  if (!currentAssignment) {
+    throw new ApiError(409, "No active assignment found for this research item");
+  }
+
+  if (currentAssignment.designerId !== designerId) {
+    throw new ApiError(403, "You are not assigned to this research item");
+  }
+
+  const latestReview = await client.reviewSubmission.findFirst({
+    where: { researchItemId },
+    orderBy: { roundNumber: "desc" },
+    select: {
+      approvedAt: true,
+    },
+  });
+
+  if (!latestReview || !latestReview.approvedAt) {
+    throw new ApiError(
+      500,
+      "Approved review submission record not found for this design"
+    );
+  }
+
+  const existingFinalAssetsCount = await client.finalAsset.count({
+    where: { researchItemId },
+  });
+
+  if (existingFinalAssetsCount > 0) {
+    throw new ApiError(
+      409,
+      "Final assets have already been uploaded for this design."
+    );
+  }
+
+  return researchItem;
+};
+
+// Persists uploaded R2 objects with the same row lock and duplicate recheck used by the legacy endpoint.
+const persistUploadedFinalAssets = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string,
+  uploadedAssets: readonly UploadedFinalAsset[]
+): Promise<UploadFinalAssetsResult> => {
+  const finalAssets = await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
+      const researchItem = await assertFinalAssetUploadEligibility(
+        tx,
+        workspaceId,
+        researchItemId,
+        designerId
+      );
+
+      const createdAssets = await Promise.all(
+        uploadedAssets.map((asset) =>
+          tx.finalAsset.create({
+            data: {
+              researchItemId,
+              storageKey: asset.storageKey,
+              fileName: asset.fileName,
+              fileSize: asset.fileSize,
+              mimeType: asset.mimeType,
+              uploadedById: designerId,
+            },
+            select: {
+              id: true,
+              fileName: true,
+              fileSize: true,
+              mimeType: true,
+            },
+          })
+        )
+      );
+
+      return {
+        researchItem,
+        finalAssets: createdAssets,
+      };
+    },
+    {
+      maxWait: 10000,
+      timeout: 15000,
+    }
+  );
+
+  return {
+    researchItem: finalAssets.researchItem,
+    finalAssets: finalAssets.finalAssets.map((asset) => ({
+      id: asset.id,
+      fileName: asset.fileName,
+      fileSize: asset.fileSize.toString(),
+      mimeType: asset.mimeType,
+    })),
+  };
 };
 
 export const safeDesignerWorkQueueSelect = {
@@ -1016,76 +1201,12 @@ export const uploadFinalAssets = async (
   }
 
   // 2. Authoritative prechecks
-  const researchItem = await prisma.researchItem.findFirst({
-    where: {
-      id: researchItemId,
-      workspaceId,
-    },
-    select: {
-      id: true,
-      status: true,
-    },
-  });
-
-  if (!researchItem) {
-    throw new ApiError(404, "Research item not found");
-  }
-
-  if (researchItem.status !== ResearchStatus.DESIGN_APPROVED) {
-    throw new ApiError(
-      409,
-      `Cannot upload final assets for research item with status ${researchItem.status}`
-    );
-  }
-
-  const currentAssignment = await prisma.designAssignment.findFirst({
-    where: {
-      researchItemId,
-      isCurrent: true,
-    },
-    select: {
-      id: true,
-      designerId: true,
-      isCurrent: true,
-    },
-  });
-
-  if (!currentAssignment) {
-    throw new ApiError(409, "No active assignment found for this research item");
-  }
-
-  if (currentAssignment.designerId !== designerId) {
-    throw new ApiError(403, "You are not assigned to this research item");
-  }
-
-  // Verify approval invariant: latest review submission exists and was approved
-  const latestReview = await prisma.reviewSubmission.findFirst({
-    where: { researchItemId },
-    orderBy: { roundNumber: "desc" },
-    select: {
-      id: true,
-      approvedAt: true,
-    },
-  });
-
-  if (!latestReview || !latestReview.approvedAt) {
-    throw new ApiError(
-      500,
-      "Approved review submission record not found for this design"
-    );
-  }
-
-  // One-batch rule: reject duplicate upload if FinalAssets already exist
-  const existingFinalAssetsCount = await prisma.finalAsset.count({
-    where: { researchItemId },
-  });
-
-  if (existingFinalAssetsCount > 0) {
-    throw new ApiError(
-      409,
-      "Final assets have already been uploaded for this design."
-    );
-  }
+  await assertFinalAssetUploadEligibility(
+    prisma,
+    workspaceId,
+    researchItemId,
+    designerId
+  );
 
   const uploadedAssets: UploadedFinalAsset[] = [];
 
@@ -1119,115 +1240,12 @@ export const uploadFinalAssets = async (
   }
 
   try {
-    const finalAssets = await prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT id FROM "ResearchItem" WHERE id = ${researchItemId} FOR UPDATE`;
-
-        const currentResearchItem = await tx.researchItem.findFirst({
-          where: {
-            id: researchItemId,
-            workspaceId,
-          },
-          select: {
-            id: true,
-            status: true,
-          },
-        });
-
-        if (!currentResearchItem) {
-          throw new ApiError(404, "Research item not found");
-        }
-
-        if (currentResearchItem.status !== ResearchStatus.DESIGN_APPROVED) {
-          throw new ApiError(
-            409,
-            `Cannot upload final assets for research item with status ${currentResearchItem.status}`
-          );
-        }
-
-        const currentDesignAssignment = await tx.designAssignment.findFirst({
-          where: {
-            researchItemId,
-            isCurrent: true,
-          },
-          select: {
-            designerId: true,
-          },
-        });
-
-        if (!currentDesignAssignment) {
-          throw new ApiError(409, "No active assignment found for this research item");
-        }
-
-        if (currentDesignAssignment.designerId !== designerId) {
-          throw new ApiError(403, "You are not assigned to this research item");
-        }
-
-        const currentLatestReview = await tx.reviewSubmission.findFirst({
-          where: { researchItemId },
-          orderBy: { roundNumber: "desc" },
-          select: {
-            approvedAt: true,
-          },
-        });
-
-        if (!currentLatestReview || !currentLatestReview.approvedAt) {
-          throw new ApiError(
-            500,
-            "Approved review submission record not found for this design"
-          );
-        }
-
-        const currentFinalAssetCount = await tx.finalAsset.count({
-          where: { researchItemId },
-        });
-
-        if (currentFinalAssetCount > 0) {
-          throw new ApiError(
-            409,
-            "Final assets have already been uploaded for this design."
-          );
-        }
-
-        return Promise.all(
-          uploadedAssets.map((asset) =>
-            tx.finalAsset.create({
-              data: {
-                researchItemId,
-                storageKey: asset.storageKey,
-                fileName: asset.fileName,
-                fileSize: asset.fileSize,
-                mimeType: asset.mimeType,
-                uploadedById: designerId,
-              },
-              select: {
-                id: true,
-                fileName: true,
-                fileSize: true,
-                mimeType: true,
-              },
-            })
-          )
-        );
-      },
-      {
-        maxWait: 10000,
-        timeout: 15000,
-      }
+    return await persistUploadedFinalAssets(
+      workspaceId,
+      researchItemId,
+      designerId,
+      uploadedAssets
     );
-
-    return {
-      researchItem: {
-        id: researchItem.id,
-        status: researchItem.status,
-      },
-      finalAssets: finalAssets.map((asset) => ({
-        id: asset.id,
-        fileName: asset.fileName,
-        fileSize: asset.fileSize.toString(),
-        mimeType: asset.mimeType,
-      })),
-    };
   } catch (error) {
     await rollbackUploadedFinalAssets(uploadedAssets, storage.remove);
 
@@ -1236,6 +1254,256 @@ export const uploadFinalAssets = async (
     }
 
     throw new ApiError(500, "Failed to save final assets");
+  }
+};
+
+const getBoundMultipartSession = (
+  sessionToken: string,
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string
+) => {
+  const session = verifyFinalAssetMultipartSession(sessionToken);
+
+  if (
+    session.workspaceId !== workspaceId ||
+    session.researchItemId !== researchItemId ||
+    session.designerId !== designerId
+  ) {
+    throw new ApiError(403, "Multipart upload session does not match this request");
+  }
+
+  if (
+    session.expectedSize > MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES ||
+    session.partCount > MAX_MULTIPART_FINAL_ASSET_PARTS ||
+    session.partCount !==
+      Math.ceil(session.expectedSize / MULTIPART_FINAL_ASSET_PART_SIZE_BYTES)
+  ) {
+    throw new ApiError(400, "Multipart upload session is invalid");
+  }
+
+  return session;
+};
+
+const validateCompletedMultipartParts = (
+  parts: readonly FinalAssetMultipartCompletePart[],
+  expectedPartCount: number
+): FinalAssetMultipartCompletePart[] => {
+  if (parts.length !== expectedPartCount) {
+    throw new ApiError(400, "All multipart upload parts are required");
+  }
+
+  const sortedParts = [...parts].sort(
+    (firstPart, secondPart) => firstPart.partNumber - secondPart.partNumber
+  );
+
+  for (let index = 0; index < sortedParts.length; index += 1) {
+    if (sortedParts[index].partNumber !== index + 1) {
+      throw new ApiError(400, "Multipart upload parts are incomplete or invalid");
+    }
+  }
+
+  return sortedParts;
+};
+
+const removeCompletedMultipartObjectIfUnpersisted = async (
+  storageKey: string,
+  removeObject: FinalAssetMultipartStorageOperations["remove"]
+): Promise<void> => {
+  try {
+    const persistedAsset = await prisma.finalAsset.findUnique({
+      where: { storageKey },
+      select: { id: true },
+    });
+
+    if (persistedAsset) {
+      return;
+    }
+
+    await removeObject(storageKey);
+  } catch {
+    console.error("Failed to remove completed multipart final asset during rollback");
+  }
+};
+
+const isMissingMultipartUploadError = (error: unknown): boolean => {
+  return (
+    error instanceof Error &&
+    (error.name === "NoSuchUpload" || error.name === "NotFound")
+  );
+};
+
+// Authorizes a direct R2 multipart ZIP upload and returns only presigned part URLs plus its opaque session.
+export const initFinalAssetMultipartUpload = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string,
+  input: InitFinalAssetMultipartUploadBodyInput,
+  storage: FinalAssetMultipartStorageOperations = r2FinalAssetMultipartStorage
+): Promise<FinalAssetMultipartInitResult> => {
+  const fileName = validateMultipartFinalAssetFileName(input.fileName);
+  await assertFinalAssetUploadEligibility(
+    prisma,
+    workspaceId,
+    researchItemId,
+    designerId
+  );
+
+  const partCount = Math.ceil(
+    input.fileSize / MULTIPART_FINAL_ASSET_PART_SIZE_BYTES
+  );
+  const storageKey = buildFinalAssetKey({
+    workspaceId,
+    researchItemId,
+    fileName,
+  });
+  let uploadId: string | null = null;
+
+  try {
+    const createdUploadId = await storage.createMultipartUpload({
+      storageKey,
+      mimeType: "application/zip",
+    });
+    uploadId = createdUploadId;
+
+    const parts = await Promise.all(
+      Array.from({ length: partCount }, async (_, index) => ({
+        partNumber: index + 1,
+        uploadUrl: await storage.getPresignedUploadPartUrl({
+          storageKey,
+          uploadId: createdUploadId,
+          partNumber: index + 1,
+        }),
+      }))
+    );
+
+    return {
+      sessionToken: signFinalAssetMultipartSession({
+        workspaceId,
+        researchItemId,
+        designerId,
+        uploadId: createdUploadId,
+        storageKey,
+        fileName,
+        expectedSize: input.fileSize,
+        partCount,
+      }),
+      partSize: MULTIPART_FINAL_ASSET_PART_SIZE_BYTES,
+      partCount,
+      parts,
+    };
+  } catch {
+    if (uploadId) {
+      try {
+        await storage.abortMultipartUpload({ storageKey, uploadId });
+      } catch {
+        console.error("Failed to abort multipart final asset during initialization rollback");
+      }
+    }
+
+    throw new ApiError(502, "Failed to initialize multipart upload storage");
+  }
+};
+
+// Completes an authorized R2 upload, verifies its exact object size, then reuses locked FinalAsset persistence.
+export const completeFinalAssetMultipartUpload = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string,
+  input: CompleteFinalAssetMultipartUploadBodyInput,
+  storage: FinalAssetMultipartStorageOperations = r2FinalAssetMultipartStorage
+): Promise<UploadFinalAssetsResult> => {
+  const session = getBoundMultipartSession(
+    input.sessionToken,
+    workspaceId,
+    researchItemId,
+    designerId
+  );
+  const parts = validateCompletedMultipartParts(input.parts, session.partCount);
+
+  await assertFinalAssetUploadEligibility(
+    prisma,
+    workspaceId,
+    researchItemId,
+    designerId
+  );
+
+  let multipartUploadCompleted = false;
+
+  try {
+    await storage.completeMultipartUpload({
+      storageKey: session.storageKey,
+      uploadId: session.uploadId,
+      parts,
+    });
+    multipartUploadCompleted = true;
+
+    const objectMetadata = await storage.headObject(session.storageKey);
+    const actualSize = objectMetadata.contentLength;
+
+    if (
+      typeof actualSize !== "number" ||
+      !Number.isSafeInteger(actualSize) ||
+      actualSize <= 0 ||
+      actualSize > MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES ||
+      actualSize !== session.expectedSize
+    ) {
+      throw new ApiError(400, "Uploaded ZIP size could not be verified");
+    }
+
+    return await persistUploadedFinalAssets(
+      workspaceId,
+      researchItemId,
+      designerId,
+      [
+        {
+          storageKey: session.storageKey,
+          fileName: session.fileName,
+          fileSize: BigInt(actualSize),
+          mimeType: "application/zip",
+        },
+      ]
+    );
+  } catch (error) {
+    if (multipartUploadCompleted) {
+      await removeCompletedMultipartObjectIfUnpersisted(
+        session.storageKey,
+        storage.remove
+      );
+    }
+
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    throw new ApiError(502, "Failed to complete multipart upload storage");
+  }
+};
+
+// Aborts an incomplete direct R2 upload using only the signed session binding.
+export const abortFinalAssetMultipartUpload = async (
+  workspaceId: string,
+  researchItemId: string,
+  designerId: string,
+  sessionToken: string,
+  storage: FinalAssetMultipartStorageOperations = r2FinalAssetMultipartStorage
+): Promise<void> => {
+  const session = getBoundMultipartSession(
+    sessionToken,
+    workspaceId,
+    researchItemId,
+    designerId
+  );
+
+  try {
+    await storage.abortMultipartUpload({
+      storageKey: session.storageKey,
+      uploadId: session.uploadId,
+    });
+  } catch (error) {
+    if (!isMissingMultipartUploadError(error)) {
+      throw new ApiError(502, "Failed to abort multipart upload storage");
+    }
   }
 };
 

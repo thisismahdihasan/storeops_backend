@@ -331,6 +331,30 @@ export const designerPaths: OpenApiPathMap = {
       responses: { "200": jsonSuccess("Final assets uploaded successfully.", { type: "object", required: ["researchItem", "finalAssets"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/ResearchStatus" } } }, finalAssets: { type: "array", minItems: 1, maxItems: 1, items: { $ref: "#/components/schemas/SafeFinalAsset" } } } }), "400": jsonError("Invalid final asset type, MIME pairing, field, count, or file size."), ...standardWorkflowErrors, "502": jsonError("Private storage upload failed."), "500": jsonError("Final asset persistence invariant failed.") },
     },
   },
+  "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/final-assets/multipart/init": {
+    post: {
+      tags: ["Designer"], summary: "Initialize a direct multipart final ZIP upload", security: [{ cookieAuth: [] }],
+      description: "Current assigned designer only, after DESIGN_APPROVED. Creates a private R2 multipart upload for exactly one .zip package up to 1 GiB. The response contains an opaque, one-hour session token and short-lived per-part URLs; it never exposes an R2 key, upload ID, or credentials.", parameters: itemParameters,
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["fileName", "fileSize"], properties: { fileName: { type: "string", minLength: 1, maxLength: 255, description: "ZIP filename only." }, fileSize: { type: "integer", minimum: 1, maximum: 1073741824, description: "Declared ZIP byte size; maximum 1 GiB." } } } } } },
+      responses: { "200": jsonSuccess("Multipart final asset upload initialized successfully.", { type: "object", required: ["sessionToken", "partSize", "partCount", "parts"], properties: { sessionToken: { type: "string", description: "Opaque signed upload session; expires after one hour." }, partSize: { type: "integer", example: 10485760, description: "10 MiB multipart part size." }, partCount: { type: "integer", minimum: 1, maximum: 103 }, parts: { type: "array", items: { type: "object", required: ["partNumber", "uploadUrl"], properties: { partNumber: { type: "integer", minimum: 1 }, uploadUrl: { type: "string", format: "uri", description: "Short-lived URL for uploading this one part." } } } } } }), "400": jsonError("Invalid ZIP filename or declared size."), ...standardWorkflowErrors, "502": jsonError("Private multipart storage could not be initialized.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/final-assets/multipart/complete": {
+    post: {
+      tags: ["Designer"], summary: "Complete a direct multipart final ZIP upload", security: [{ cookieAuth: [] }],
+      description: "Current assigned designer only. The signed session is verified and bound to the workspace, item, and designer. All unique uploaded part ETags are required; the backend sorts them, verifies the final private object size, and applies the same locked FinalAsset persistence invariant as the legacy upload endpoint.", parameters: itemParameters,
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["sessionToken", "parts"], properties: { sessionToken: { type: "string" }, parts: { type: "array", minItems: 1, maxItems: 103, items: { type: "object", additionalProperties: false, required: ["partNumber", "eTag"], properties: { partNumber: { type: "integer", minimum: 1, maximum: 103 }, eTag: { type: "string", minLength: 1, maxLength: 512 } } } } } } } } },
+      responses: { "200": jsonSuccess("Multipart final asset upload completed successfully.", { type: "object", required: ["researchItem", "finalAssets"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/ResearchStatus" } } }, finalAssets: { type: "array", minItems: 1, maxItems: 1, items: { $ref: "#/components/schemas/SafeFinalAsset" } } } }), "400": jsonError("Invalid, expired, tampered, incomplete, duplicate, or size-mismatched multipart upload."), ...standardWorkflowErrors, "502": jsonError("Private multipart storage could not be completed or verified.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/final-assets/multipart/abort": {
+    post: {
+      tags: ["Designer"], summary: "Abort a direct multipart final ZIP upload", security: [{ cookieAuth: [] }],
+      description: "Current assigned designer only. Cancels the incomplete private R2 multipart upload associated with the opaque session. Repeating a successful abort is safe when the storage provider reports the upload no longer exists.", parameters: itemParameters,
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["sessionToken"], properties: { sessionToken: { type: "string" } } } } } },
+      responses: { "200": jsonSuccess("Multipart final asset upload aborted successfully.", { type: "object", additionalProperties: false }), "400": jsonError("Invalid or expired multipart upload session."), "403": jsonError("The multipart upload session is not owned by this designer or workspace."), "502": jsonError("Private multipart storage could not be aborted.") },
+    },
+  },
   "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/complete": {
     post: {
       tags: ["Designer"], summary: "Complete approved design work", security: [{ cookieAuth: [] }],
