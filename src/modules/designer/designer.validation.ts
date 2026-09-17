@@ -228,51 +228,13 @@ export type StartCorrectionBodyInput = z.infer<
   typeof startCorrectionBodySchema
 >;
 
-export const uploadFinalAssetsParamsSchema = z
-  .object({
-    workspaceId: z.string().trim().min(1, "workspaceId is required"),
-    researchItemId: z.string().trim().min(1, "researchItemId is required"),
-  })
-  .strict();
-
-export type UploadFinalAssetsParamsInput = z.infer<
-  typeof uploadFinalAssetsParamsSchema
->;
-
-export const MAX_FINAL_ASSET_FILES = 1;
-export const MAX_FINAL_ASSET_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
-// Temporary multipart policy: supports large production ZIPs while keeping the init response bounded.
+// Multipart policy: supports large production ZIPs up to 1 GiB while keeping the init response bounded.
 export const MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GiB
 export const MULTIPART_FINAL_ASSET_PART_SIZE_BYTES = 10 * 1024 * 1024; // 10 MiB
 export const MAX_MULTIPART_FINAL_ASSET_PARTS = Math.ceil(
   MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES /
     MULTIPART_FINAL_ASSET_PART_SIZE_BYTES
 );
-
-export const ALLOWED_FINAL_ASSET_EXTENSIONS = [".zip"] as const;
-
-export type AllowedFinalAssetExtension =
-  (typeof ALLOWED_FINAL_ASSET_EXTENSIONS)[number];
-
-export const ALLOWED_FINAL_ASSET_MIMETYPES = [
-  "application/zip",
-  "application/x-zip-compressed",
-  "application/octet-stream",
-] as const;
-
-export type AllowedFinalAssetMimeType =
-  (typeof ALLOWED_FINAL_ASSET_MIMETYPES)[number];
-
-export const EXTENSION_MIME_MAP: Record<
-  AllowedFinalAssetExtension,
-  readonly string[]
-> = {
-  ".zip": [
-    "application/zip",
-    "application/x-zip-compressed",
-    "application/octet-stream",
-  ],
-};
 
 // Sanitizes final asset filenames: strips path traversal and control characters, verifies non-empty.
 export const sanitizeFinalAssetFileName = (rawName: string): string => {
@@ -297,49 +259,6 @@ export const sanitizeFinalAssetFileName = (rawName: string): string => {
   return cleaned;
 };
 
-// Validates that a file has an allowed extension, matching MIME type, and safe size.
-export const validateFinalAssetFile = (file: {
-  originalname: string;
-  mimetype: string;
-  size?: number;
-}): {
-  sanitizedName: string;
-  extension: AllowedFinalAssetExtension;
-  mimeType: string;
-} => {
-  const sanitizedName = sanitizeFinalAssetFileName(file.originalname);
-  const ext = path.extname(sanitizedName).toLowerCase() as AllowedFinalAssetExtension;
-
-  if (!ALLOWED_FINAL_ASSET_EXTENSIONS.includes(ext)) {
-    throw new ApiError(
-      400,
-      `Unsupported file type "${ext}". Allowed type: .zip`
-    );
-  }
-
-  const normalizedMime = file.mimetype.trim().toLowerCase();
-  const allowedMimesForExt = EXTENSION_MIME_MAP[ext];
-
-  if (!allowedMimesForExt || !allowedMimesForExt.includes(normalizedMime)) {
-    throw new ApiError(
-      400,
-      `Invalid MIME type "${normalizedMime}" for file "${sanitizedName}". Expected one of: ${allowedMimesForExt.join(", ")}`
-    );
-  }
-
-  if (file.size !== undefined && file.size > MAX_FINAL_ASSET_FILE_SIZE_BYTES) {
-    throw new ApiError(
-      400,
-      `File "${sanitizedName}" exceeds maximum limit of 100MB per file`
-    );
-  }
-
-  return {
-    sanitizedName,
-    extension: ext,
-    mimeType: normalizedMime,
-  };
-};
 
 // Validates the server-owned metadata needed to begin a direct multipart ZIP upload.
 export const validateMultipartFinalAssetFileName = (fileName: string): string => {

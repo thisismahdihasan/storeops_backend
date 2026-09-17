@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { Request, Response } from "express";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
 import { ApiError } from "../../shared/ApiError.js";
@@ -8,7 +7,6 @@ import {
   ReviewImageDestroyer,
   ReviewImageUploader,
 } from "./designer.review-storage.js";
-import { FinalAssetIncomingFile } from "./designer.type.js";
 import {
   abortFinalAssetMultipartUploadBodySchema,
   completeDesignBodySchema,
@@ -26,7 +24,6 @@ import {
   startDesignWorkParamsSchema,
   submitDesignReviewBodySchema,
   submitDesignReviewParamsSchema,
-  uploadFinalAssetsParamsSchema,
 } from "./designer.validation.js";
 
 // Returns the authenticated current designer's private design-work detail.
@@ -190,55 +187,6 @@ export const startCorrection = async (
     message: "Design correction started successfully",
     data: result,
   });
-};
-
-// Handles HTTP request for uploading final production files to StoreOps' configured storage provider.
-export const uploadFinalAssets = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
-  const authReq = req as WorkspaceAuthorizedRequest;
-  const { workspaceId, researchItemId } = uploadFinalAssetsParamsSchema.parse(
-    req.params
-  );
-
-  const rawFiles = req.files as Express.Multer.File[] | undefined;
-  if (!rawFiles || !Array.isArray(rawFiles) || rawFiles.length !== 1) {
-    throw new ApiError(400, "Exactly one final asset file is required");
-  }
-
-  const incomingFiles: FinalAssetIncomingFile[] = rawFiles.map((f) => ({
-    path: f.path,
-    originalname: f.originalname,
-    mimetype: f.mimetype,
-    size: f.size,
-  }));
-
-  try {
-    const result = await designerService.uploadFinalAssets(
-      workspaceId,
-      researchItemId,
-      authReq.user.id,
-      incomingFiles
-    );
-
-    ApiResponse.success(res, {
-      statusCode: 200,
-      message: "Final assets uploaded successfully",
-      data: result,
-    });
-  } finally {
-    // Defensively unlink all temporary files regardless of success or failure
-    for (const f of rawFiles) {
-      if (f.path) {
-        try {
-          await fs.promises.unlink(f.path);
-        } catch {
-          // Ignore if already unlinked or cleaned
-        }
-      }
-    }
-  }
 };
 
 // Creates a signed, workspace-bound R2 multipart upload session for one approved final ZIP.

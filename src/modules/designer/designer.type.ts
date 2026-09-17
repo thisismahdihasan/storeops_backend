@@ -145,12 +145,6 @@ export type UploadFinalAssetsResult = {
   finalAssets: UploadedFinalAssetItem[];
 };
 
-export type FinalAssetIncomingFile = {
-  path: string;
-  originalname: string;
-  mimetype: string;
-  size: number;
-};
 
 export type FinalAssetMultipartInitResult = {
   sessionToken: string;

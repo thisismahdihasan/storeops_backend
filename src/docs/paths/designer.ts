@@ -323,14 +323,6 @@ export const designerPaths: OpenApiPathMap = {
       responses: { "200": jsonSuccess("Design correction started successfully.", itemStatus("DESIGN_IN_PROGRESS")), ...standardWorkflowErrors },
     },
   },
-  "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/final-assets": {
-    post: {
-      tags: ["Designer"], summary: "Upload private final production assets", security: [{ cookieAuth: [] }],
-      description: "Current assigned designer only, after DESIGN_APPROVED. Send exactly one .zip file on `files`; singular `file` is accepted as a compatibility alias. Accepted MIME types: application/zip, application/x-zip-compressed, or application/octet-stream. Maximum 100 MB. No storage key or R2 details are returned.", parameters: itemParameters,
-      requestBody: { required: true, content: { "multipart/form-data": { schema: { type: "object", required: ["files"], properties: { files: { type: "string", format: "binary", description: "Exactly one .zip file. Maximum 100 MB." } } } } } },
-      responses: { "200": jsonSuccess("Final assets uploaded successfully.", { type: "object", required: ["researchItem", "finalAssets"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/ResearchStatus" } } }, finalAssets: { type: "array", minItems: 1, maxItems: 1, items: { $ref: "#/components/schemas/SafeFinalAsset" } } } }), "400": jsonError("Invalid final asset type, MIME pairing, field, count, or file size."), ...standardWorkflowErrors, "502": jsonError("Private storage upload failed."), "500": jsonError("Final asset persistence invariant failed.") },
-    },
-  },
   "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/final-assets/multipart/init": {
     post: {
       tags: ["Designer"], summary: "Initialize a direct multipart final ZIP upload", security: [{ cookieAuth: [] }],
@@ -342,7 +334,7 @@ export const designerPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/design/{researchItemId}/final-assets/multipart/complete": {
     post: {
       tags: ["Designer"], summary: "Complete a direct multipart final ZIP upload", security: [{ cookieAuth: [] }],
-      description: "Current assigned designer only. The signed session is verified and bound to the workspace, item, and designer. All unique uploaded part ETags are required; the backend sorts them, verifies the final private object size, and applies the same locked FinalAsset persistence invariant as the legacy upload endpoint.", parameters: itemParameters,
+      description: "Current assigned designer only. The signed session is verified and bound to the workspace, item, and designer. All unique uploaded part ETags are required; the backend sorts them, verifies the final private object size, and applies the locked FinalAsset persistence invariant.", parameters: itemParameters,
       requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["sessionToken", "parts"], properties: { sessionToken: { type: "string" }, parts: { type: "array", minItems: 1, maxItems: 103, items: { type: "object", additionalProperties: false, required: ["partNumber", "eTag"], properties: { partNumber: { type: "integer", minimum: 1, maximum: 103 }, eTag: { type: "string", minLength: 1, maxLength: 512 } } } } } } } } },
       responses: { "200": jsonSuccess("Multipart final asset upload completed successfully.", { type: "object", required: ["researchItem", "finalAssets"], properties: { researchItem: { type: "object", required: ["id", "status"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/ResearchStatus" } } }, finalAssets: { type: "array", minItems: 1, maxItems: 1, items: { $ref: "#/components/schemas/SafeFinalAsset" } } } }), "400": jsonError("Invalid, expired, tampered, incomplete, duplicate, or size-mismatched multipart upload."), ...standardWorkflowErrors, "502": jsonError("Private multipart storage could not be completed or verified.") },
     },

@@ -11,14 +11,12 @@ import {
   startCorrection,
   startDesignWork,
   submitDesignReview,
-  uploadFinalAssets,
   completeDesign,
   abortFinalAssetMultipartUpload,
   completeFinalAssetMultipartUpload,
   initFinalAssetMultipartUpload,
 } from "./designer.controller.js";
 import { reviewImageUploadMiddleware } from "./designer.upload.js";
-import { finalAssetsUploadMiddleware } from "./designer.final-asset-upload.js";
 
 const designerRouter: Router = Router({ mergeParams: true });
 
@@ -72,14 +70,6 @@ designRouter.post(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.DESIGNER),
   catchAsync(startCorrection)
-);
-
-designRouter.post(
-  "/:researchItemId/final-assets",
-  requireAuth,
-  requireWorkspaceRole(WorkspaceRole.DESIGNER),
-  finalAssetsUploadMiddleware,
-  catchAsync(uploadFinalAssets)
 );
 
 designRouter.post(

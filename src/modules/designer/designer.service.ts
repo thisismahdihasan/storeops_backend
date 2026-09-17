@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
@@ -9,12 +8,10 @@ import {
   GetDesignerWorkQueueQueryInput,
   MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES,
   MAX_MULTIPART_FINAL_ASSET_PARTS,
-  MAX_FINAL_ASSET_FILES,
   MULTIPART_FINAL_ASSET_PART_SIZE_BYTES,
   ReportDesignIssueBodyInput,
   CompleteFinalAssetMultipartUploadBodyInput,
   InitFinalAssetMultipartUploadBodyInput,
-  validateFinalAssetFile,
   validateMultipartFinalAssetFileName,
 } from "./designer.validation.js";
 import {
@@ -22,7 +19,6 @@ import {
   AdminDesignListResult,
   DesignerWorkQueueItem,
   DesignerWorkQueueResult,
-  FinalAssetIncomingFile,
   NOTIFICATION_TYPE_DESIGN_ISSUE_REPORTED,
   NOTIFICATION_TYPE_DESIGN_REVIEW_SUBMITTED,
   ReportDesignIssueResult,
@@ -51,23 +47,16 @@ import {
   deleteObject,
   getPresignedUploadPartUrl,
   headObject,
-  uploadObject,
   AbortMultipartUploadInput,
   CompleteMultipartUploadInput,
   CreateMultipartUploadInput,
   PresignedUploadPartInput,
-  UploadObjectInput,
 } from "../storage/r2.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 import {
   signFinalAssetMultipartSession,
   verifyFinalAssetMultipartSession,
 } from "./designer.multipart-session.js";
-
-type FinalAssetStorageOperations = {
-  upload: (input: UploadObjectInput) => Promise<void>;
-  remove: (storageKey: string) => Promise<void>;
-};
 
 type FinalAssetMultipartStorageOperations = {
   createMultipartUpload: (input: CreateMultipartUploadInput) => Promise<string>;
@@ -76,11 +65,6 @@ type FinalAssetMultipartStorageOperations = {
   abortMultipartUpload: (input: AbortMultipartUploadInput) => Promise<void>;
   headObject: (storageKey: string) => Promise<{ contentLength: number | undefined }>;
   remove: (storageKey: string) => Promise<void>;
-};
-
-const r2FinalAssetStorage: FinalAssetStorageOperations = {
-  upload: uploadObject,
-  remove: deleteObject,
 };
 
 const r2FinalAssetMultipartStorage: FinalAssetMultipartStorageOperations = {
@@ -97,19 +81,6 @@ type UploadedFinalAsset = {
   fileName: string;
   fileSize: bigint;
   mimeType: string;
-};
-
-const rollbackUploadedFinalAssets = async (
-  uploadedAssets: readonly UploadedFinalAsset[],
-  removeObject: FinalAssetStorageOperations["remove"]
-): Promise<void> => {
-  for (const asset of uploadedAssets) {
-    try {
-      await removeObject(asset.storageKey);
-    } catch {
-      console.error("Failed to remove uploaded final asset during rollback");
-    }
-  }
 };
 
 type FinalAssetEligibilityClient = Pick<
@@ -1183,79 +1154,6 @@ export const startCorrection = async (
   );
 };
 
-// Uploads validated final assets to private R2 storage before persisting their internal object keys.
-export const uploadFinalAssets = async (
-  workspaceId: string,
-  researchItemId: string,
-  designerId: string,
-  incomingFiles: FinalAssetIncomingFile[],
-  storage: FinalAssetStorageOperations = r2FinalAssetStorage
-): Promise<UploadFinalAssetsResult> => {
-  // 1. Validate file inputs
-  if (!incomingFiles || incomingFiles.length !== MAX_FINAL_ASSET_FILES) {
-    throw new ApiError(400, "Exactly one final asset file is required");
-  }
-
-  for (const file of incomingFiles) {
-    validateFinalAssetFile(file);
-  }
-
-  // 2. Authoritative prechecks
-  await assertFinalAssetUploadEligibility(
-    prisma,
-    workspaceId,
-    researchItemId,
-    designerId
-  );
-
-  const uploadedAssets: UploadedFinalAsset[] = [];
-
-  try {
-    for (const file of incomingFiles) {
-      const validatedFile = validateFinalAssetFile(file);
-      const fileName = validatedFile.sanitizedName;
-      const storageKey = buildFinalAssetKey({
-        workspaceId,
-        researchItemId,
-        fileName,
-      });
-
-      await storage.upload({
-        storageKey,
-        body: fs.createReadStream(file.path),
-        mimeType: validatedFile.mimeType,
-        contentLength: file.size,
-      });
-
-      uploadedAssets.push({
-        storageKey,
-        fileName,
-        fileSize: BigInt(file.size),
-        mimeType: validatedFile.mimeType,
-      });
-    }
-  } catch {
-    await rollbackUploadedFinalAssets(uploadedAssets, storage.remove);
-    throw new ApiError(502, "Failed to upload final asset to storage.");
-  }
-
-  try {
-    return await persistUploadedFinalAssets(
-      workspaceId,
-      researchItemId,
-      designerId,
-      uploadedAssets
-    );
-  } catch (error) {
-    await rollbackUploadedFinalAssets(uploadedAssets, storage.remove);
-
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    throw new ApiError(500, "Failed to save final assets");
-  }
-};
 
 const getBoundMultipartSession = (
   sessionToken: string,
