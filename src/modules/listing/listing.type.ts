@@ -38,6 +38,7 @@ export type ListerWorkQueueItem = {
   assignmentId: string;
   researchItem: ListerQueueResearchItem;
   preview: ListerQueuePreview;
+  finalAssetId: string | null;
 };
 
 export type PaginationMeta = {

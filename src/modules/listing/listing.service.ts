@@ -63,6 +63,13 @@ export const safeListerWorkQueueSelect = {
           imageDeletedAt: true,
         },
       },
+      finalAssets: {
+        orderBy: { uploadedAt: "asc" },
+        take: 1,
+        select: {
+          id: true,
+        },
+      },
     },
   },
 } as const;
@@ -131,6 +138,7 @@ export const getListerWorkQueue = async (
         status: assignment.researchItem.status,
       },
       preview,
+      finalAssetId: assignment.researchItem.finalAssets[0]?.id ?? null,
     };
   });
 
