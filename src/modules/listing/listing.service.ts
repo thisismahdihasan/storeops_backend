@@ -43,24 +43,13 @@ const LISTER_DETAIL_STATUSES = new Set<ResearchStatus>(
 
 export const safeListerWorkQueueSelect = {
   id: true,
-  assignedAt: true,
-  startedAt: true,
   researchItem: {
     select: {
       id: true,
       etsyListingId: true,
       originalUrl: true,
-      normalizedUrl: true,
       title: true,
-      referenceImageUrl: true,
       status: true,
-      createdAt: true,
-      createdBy: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
       reviewSubmissions: {
         where: {
           approvedAt: { not: null },
@@ -70,22 +59,8 @@ export const safeListerWorkQueueSelect = {
         },
         take: 1,
         select: {
-          id: true,
           imageUrl: true,
           imageDeletedAt: true,
-          roundNumber: true,
-          approvedAt: true,
-        },
-      },
-      finalAssets: {
-        orderBy: {
-          uploadedAt: "asc",
-        },
-        select: {
-          id: true,
-          fileName: true,
-          fileSize: true,
-          mimeType: true,
         },
       },
     },
@@ -138,39 +113,24 @@ export const getListerWorkQueue = async (
 
   const items: ListerWorkQueueItem[] = assignments.map((assignment) => {
     const rawPreview = assignment.researchItem.reviewSubmissions[0] ?? null;
-    const preview = rawPreview && rawPreview.approvedAt
+    const preview = rawPreview
       ? {
-          reviewId: rawPreview.id,
           imageUrl:
             rawPreview.imageDeletedAt === null ? rawPreview.imageUrl : null,
           imageDeletedAt: rawPreview.imageDeletedAt,
-          roundNumber: rawPreview.roundNumber,
-          approvedAt: rawPreview.approvedAt,
         }
       : null;
 
     return {
       assignmentId: assignment.id,
-      assignedAt: assignment.assignedAt,
-      startedAt: assignment.startedAt,
       researchItem: {
         id: assignment.researchItem.id,
         etsyListingId: assignment.researchItem.etsyListingId,
         originalUrl: assignment.researchItem.originalUrl,
-        normalizedUrl: assignment.researchItem.normalizedUrl,
         title: assignment.researchItem.title,
-        referenceImageUrl: assignment.researchItem.referenceImageUrl,
         status: assignment.researchItem.status,
-        createdAt: assignment.researchItem.createdAt,
-        createdBy: assignment.researchItem.createdBy,
       },
       preview,
-      finalAssets: assignment.researchItem.finalAssets.map((asset) => ({
-        id: asset.id,
-        fileName: asset.fileName,
-        fileSize: asset.fileSize.toString(),
-        mimeType: asset.mimeType,
-      })),
     };
   });
 

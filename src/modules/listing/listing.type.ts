@@ -25,39 +25,19 @@ export type ListerQueueResearchItem = {
   id: string;
   etsyListingId: string;
   originalUrl: string;
-  normalizedUrl: string;
   title: string | null;
-  referenceImageUrl: string | null;
   status: ResearchStatus;
-  createdAt: Date;
-  createdBy: {
-    id: string;
-    name: string | null;
-  };
 };
 
 export type ListerQueuePreview = {
-  reviewId: string;
   imageUrl: string | null;
   imageDeletedAt: Date | null;
-  roundNumber: number;
-  approvedAt: Date;
 } | null;
-
-export type ListerQueueFinalAsset = {
-  id: string;
-  fileName: string;
-  fileSize: string;
-  mimeType: string;
-};
 
 export type ListerWorkQueueItem = {
   assignmentId: string;
-  assignedAt: Date;
-  startedAt: Date | null;
   researchItem: ListerQueueResearchItem;
   preview: ListerQueuePreview;
-  finalAssets: ListerQueueFinalAsset[];
 };
 
 export type PaginationMeta = {

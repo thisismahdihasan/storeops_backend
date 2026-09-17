@@ -185,14 +185,6 @@ export const openApiComponents = {
         profileImageUrl: { type: "string", format: "uri", nullable: true },
       },
     },
-    ListerQueueCreator: {
-      type: "object",
-      required: ["id", "name"],
-      properties: {
-        id: stringId,
-        name: { type: "string", nullable: true },
-      },
-    },
     WorkspaceSummary: {
       type: "object",
       required: ["id", "name", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled"],
@@ -279,22 +271,26 @@ export const openApiComponents = {
     ListerQueueResearchItem: {
       type: "object",
       required: [
-        "id", "etsyListingId", "originalUrl", "normalizedUrl", "title",
-        "referenceImageUrl", "status", "createdAt", "createdBy",
+        "id", "etsyListingId", "originalUrl", "title", "status",
       ],
       properties: {
         id: stringId,
         etsyListingId: { type: "string" },
         originalUrl: { type: "string", format: "uri" },
-        normalizedUrl: { type: "string", format: "uri" },
         title: { type: "string", nullable: true },
-        referenceImageUrl: { type: "string", format: "uri", nullable: true },
         status: {
           type: "string",
           enum: ["READY_FOR_LISTING", "LISTING_IN_PROGRESS"],
         },
-        createdAt: dateTime,
-        createdBy: { $ref: "#/components/schemas/ListerQueueCreator" },
+      },
+    },
+    ListerQueueApprovedPreview: {
+      type: "object",
+      nullable: true,
+      required: ["imageUrl", "imageDeletedAt"],
+      properties: {
+        imageUrl: { type: "string", format: "uri", nullable: true },
+        imageDeletedAt: { ...dateTime, nullable: true },
       },
     },
     ListingDetailResearchItem: {
