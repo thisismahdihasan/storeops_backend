@@ -27,6 +27,7 @@ const safeReviewUserSelect = {
   id: true,
   name: true,
   email: true,
+  profileImageUrl: true,
 } as const;
 
 const safeReviewHistorySelect = Prisma.validator<Prisma.ReviewSubmissionSelect>()({

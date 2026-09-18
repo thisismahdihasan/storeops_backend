@@ -4,6 +4,7 @@ export type ReviewUserSummary = {
   id: string;
   name: string | null;
   email: string;
+  profileImageUrl: string | null;
 };
 
 export type ReviewAssignmentSummary = {
