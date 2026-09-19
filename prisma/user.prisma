@@ -1,29 +1,30 @@
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
+  id                   String   @id @default(cuid())
+  email                String   @unique
+  name                 String?
   profileImageUrl      String?
   profileImagePublicId String?
-  passwordHash String
-  tokenVersion Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  passwordHash         String
+  tokenVersion         Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  passwordResetOtps        PasswordResetOtp[]
+  passwordResetOtps PasswordResetOtp[]
 
-  ownedWorkspace           Workspace?
-  memberships              WorkspaceMember[]
-  sentInvites              WorkspaceInvite[]
-  researchItemsCreated     ResearchItem[]
-  designAssignments        DesignAssignment[]
-  issuesReported           IssueReport[]       @relation("ReportedIssues")
-  issuesResolved           IssueReport[]       @relation("ResolvedIssues")
-  reviewSubmissions        ReviewSubmission[]
-  reviewsApproved          ReviewSubmission[]  @relation("ApprovedReviews")
-  reviewAnnotationsCreated ReviewAnnotation[]
-  annotationRepliesCreated AnnotationReply[]
-  finalAssetsUploaded      FinalAsset[]
-  listingAssignments       ListingAssignment[]
-  listingResults           ListingResult[]
-  notifications            Notification[]
+  ownedWorkspace            Workspace?
+  memberships               WorkspaceMember[]
+  sentInvites               WorkspaceInvite[]
+  researchItemsCreated      ResearchItem[]
+  designAssignments         DesignAssignment[]
+  issuesReported            IssueReport[]       @relation("ReportedIssues")
+  issuesResolved            IssueReport[]       @relation("ResolvedIssues")
+  reviewSubmissions         ReviewSubmission[]
+  reviewsApproved           ReviewSubmission[]  @relation("ApprovedReviews")
+  reviewAnnotationsCreated  ReviewAnnotation[]
+  annotationRepliesCreated  AnnotationReply[]
+  finalAssetsUploaded       FinalAsset[]
+  finalAssetsStorageDeleted FinalAsset[]        @relation("FinalAssetStorageDeletedBy")
+  listingAssignments        ListingAssignment[]
+  listingResults            ListingResult[]
+  notifications             Notification[]
 }

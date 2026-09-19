@@ -4,6 +4,8 @@ model Workspace {
   ownerId                       String   @unique
   designerAutoAssignmentEnabled Boolean  @default(true)
   listerAutoAssignmentEnabled   Boolean  @default(true)
+  finalAssetAutoCleanupEnabled  Boolean  @default(false)
+  finalAssetRetentionDays       Int      @default(30)
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
 

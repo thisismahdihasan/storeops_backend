@@ -1,17 +1,21 @@
 model FinalAsset {
-  id             String   @id @default(cuid())
-  researchItemId String
-  storageKey     String   @unique
-  fileName       String
-  fileSize       BigInt
-  mimeType       String
-  uploadedById   String
-  uploadedAt     DateTime @default(now())
+  id                 String    @id @default(cuid())
+  researchItemId     String
+  storageKey         String    @unique
+  fileName           String
+  fileSize           BigInt
+  mimeType           String
+  uploadedById       String
+  uploadedAt         DateTime  @default(now())
+  storageDeletedAt   DateTime?
+  storageDeletedById String?
 
-  researchItem ResearchItem @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
-  uploadedBy   User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  researchItem     ResearchItem @relation(fields: [researchItemId], references: [id], onDelete: Cascade)
+  uploadedBy       User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  storageDeletedBy User?        @relation("FinalAssetStorageDeletedBy", fields: [storageDeletedById], references: [id], onDelete: SetNull)
 
   @@index([researchItemId])
   @@index([uploadedById])
   @@index([uploadedAt])
+  @@index([storageDeletedAt])
 }

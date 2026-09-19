@@ -5,6 +5,7 @@ import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   UploadPartCommand,
@@ -48,7 +49,17 @@ export type AbortMultipartUploadInput = {
   uploadId: string;
 };
 
+export type DeleteObjectsBatchResult = {
+  deletedKeys: string[];
+  failed: Array<{
+    key: string;
+    code?: string;
+    message?: string;
+  }>;
+};
+
 const missingObjectErrorNames = new Set(["NoSuchKey", "NotFound"]);
+const maxDeleteObjectsBatchSize = 1000;
 const unavailableStorageErrorNames = new Set([
   "AccessDenied",
   "CredentialsProviderError",
@@ -200,4 +211,49 @@ export const deleteObject = async (storageKey: string): Promise<void> => {
       Key: storageKey,
     })
   );
+};
+
+// Deletes up to the R2/S3 batch limit of already-authorized object keys.
+export const deleteObjectsBatch = async (
+  storageKeys: string[]
+): Promise<DeleteObjectsBatchResult> => {
+  const uniqueStorageKeys = [...new Set(storageKeys)];
+
+  if (uniqueStorageKeys.length === 0) {
+    return { deletedKeys: [], failed: [] };
+  }
+
+  if (uniqueStorageKeys.length > maxDeleteObjectsBatchSize) {
+    throw new Error(
+      `R2 batch deletion supports at most ${maxDeleteObjectsBatchSize} object keys.`
+    );
+  }
+
+  const response = await r2Client.send(
+    new DeleteObjectsCommand({
+      Bucket: env.R2_BUCKET_NAME,
+      Delete: {
+        Objects: uniqueStorageKeys.map((Key) => ({ Key })),
+      },
+    })
+  );
+
+  const failed = (response.Errors ?? []).map((error) => {
+    if (!error.Key) {
+      throw new Error("R2 returned an object deletion error without a storage key.");
+    }
+
+    return {
+      key: error.Key,
+      ...(error.Code ? { code: error.Code } : {}),
+      ...(error.Message ? { message: error.Message } : {}),
+    };
+  });
+
+  return {
+    deletedKeys: response.Deleted?.flatMap((object) =>
+      object.Key ? [object.Key] : []
+    ) ?? [],
+    failed,
+  };
 };

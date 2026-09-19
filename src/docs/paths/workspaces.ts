@@ -259,6 +259,8 @@ export const workspacePaths: OpenApiPathMap = {
         type: "object", additionalProperties: false, properties: {
           designerAutoAssignmentEnabled: { type: "boolean" },
           listerAutoAssignmentEnabled: { type: "boolean" },
+          finalAssetAutoCleanupEnabled: { type: "boolean" },
+          finalAssetRetentionDays: { type: "integer", minimum: 1, maximum: 365 },
         }
       } } } },
       responses: {

@@ -89,12 +89,16 @@ export const updateWorkspaceSettingsSchema = z
   .object({
     designerAutoAssignmentEnabled: z.boolean().optional(),
     listerAutoAssignmentEnabled: z.boolean().optional(),
+    finalAssetAutoCleanupEnabled: z.boolean().optional(),
+    finalAssetRetentionDays: z.number().int().min(1).max(365).optional(),
   })
   .strict()
   .refine(
     (data) =>
       data.designerAutoAssignmentEnabled !== undefined ||
-      data.listerAutoAssignmentEnabled !== undefined,
+      data.listerAutoAssignmentEnabled !== undefined ||
+      data.finalAssetAutoCleanupEnabled !== undefined ||
+      data.finalAssetRetentionDays !== undefined,
     "At least one setting must be provided"
   );
 

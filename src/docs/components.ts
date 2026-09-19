@@ -187,21 +187,25 @@ export const openApiComponents = {
     },
     WorkspaceSummary: {
       type: "object",
-      required: ["id", "name", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled"],
+      required: ["id", "name", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled", "finalAssetAutoCleanupEnabled", "finalAssetRetentionDays"],
       properties: { 
         id: stringId, 
         name: { type: "string" },
         designerAutoAssignmentEnabled: { type: "boolean" },
         listerAutoAssignmentEnabled: { type: "boolean" },
+        finalAssetAutoCleanupEnabled: { type: "boolean" },
+        finalAssetRetentionDays: { type: "integer", minimum: 1, maximum: 365 },
       },
     },
     Workspace: {
       type: "object",
-      required: ["id", "name", "ownerId", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled", "createdAt", "updatedAt"],
+      required: ["id", "name", "ownerId", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled", "finalAssetAutoCleanupEnabled", "finalAssetRetentionDays", "createdAt", "updatedAt"],
       properties: {
         id: stringId, name: { type: "string" }, ownerId: stringId,
         designerAutoAssignmentEnabled: { type: "boolean" },
         listerAutoAssignmentEnabled: { type: "boolean" },
+        finalAssetAutoCleanupEnabled: { type: "boolean" },
+        finalAssetRetentionDays: { type: "integer", minimum: 1, maximum: 365 },
         createdAt: dateTime, updatedAt: dateTime,
       },
     },

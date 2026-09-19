@@ -6,6 +6,8 @@ export type SafeWorkspace = {
   ownerId: string;
   designerAutoAssignmentEnabled: boolean;
   listerAutoAssignmentEnabled: boolean;
+  finalAssetAutoCleanupEnabled: boolean;
+  finalAssetRetentionDays: number;
   createdAt: Date;
   updatedAt: Date;
 };

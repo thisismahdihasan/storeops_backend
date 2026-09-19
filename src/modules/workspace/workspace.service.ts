@@ -24,6 +24,8 @@ const safeWorkspaceSelect = {
   ownerId: true,
   designerAutoAssignmentEnabled: true,
   listerAutoAssignmentEnabled: true,
+  finalAssetAutoCleanupEnabled: true,
+  finalAssetRetentionDays: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -487,6 +489,12 @@ export const updateWorkspaceSettings = async (
           : {}),
         ...(input.listerAutoAssignmentEnabled !== undefined
           ? { listerAutoAssignmentEnabled: input.listerAutoAssignmentEnabled }
+          : {}),
+        ...(input.finalAssetAutoCleanupEnabled !== undefined
+          ? { finalAssetAutoCleanupEnabled: input.finalAssetAutoCleanupEnabled }
+          : {}),
+        ...(input.finalAssetRetentionDays !== undefined
+          ? { finalAssetRetentionDays: input.finalAssetRetentionDays }
           : {}),
       },
       select: safeWorkspaceSelect,
