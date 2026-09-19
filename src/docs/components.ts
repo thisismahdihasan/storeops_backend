@@ -346,13 +346,14 @@ export const openApiComponents = {
     },
     ListingDetailFinalAsset: {
       type: "object",
-      required: ["id", "fileName", "fileSize", "mimeType", "uploadedAt"],
+      required: ["id", "fileName", "fileSize", "mimeType", "uploadedAt", "storageDeletedAt"],
       properties: {
         id: stringId,
         fileName: { type: "string" },
         fileSize: { type: "string", pattern: "^\\d+$", description: "Decimal byte count." },
         mimeType: { type: "string" },
         uploadedAt: dateTime,
+        storageDeletedAt: { ...dateTime, nullable: true },
       },
     },
     Notification: {

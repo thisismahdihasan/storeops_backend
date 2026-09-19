@@ -229,6 +229,7 @@ export const getListerListingDetail = async (
           fileSize: true,
           mimeType: true,
           uploadedAt: true,
+          storageDeletedAt: true,
         },
       },
     },
@@ -295,6 +296,7 @@ export const getListerListingDetail = async (
       fileSize: asset.fileSize.toString(),
       mimeType: asset.mimeType,
       uploadedAt: asset.uploadedAt,
+      storageDeletedAt: asset.storageDeletedAt,
     })),
   };
 };
@@ -500,6 +502,7 @@ export const getAuthorizedFinalAssetDownload = async (
       fileSize: true,
       mimeType: true,
       storageKey: true,
+      storageDeletedAt: true,
       researchItemId: true,
       researchItem: {
         select: {
@@ -534,6 +537,13 @@ export const getAuthorizedFinalAssetDownload = async (
 
   if (!currentAssignment) {
     throw new ApiError(403, "You are not assigned to this research item");
+  }
+
+  if (asset.storageDeletedAt !== null) {
+    throw new ApiError(
+      410,
+      "The production ZIP package for this listed item has been removed from storage."
+    );
   }
 
   const stream = await getObjectStream(asset.storageKey);

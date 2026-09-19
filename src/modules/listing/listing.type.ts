@@ -111,6 +111,7 @@ export type ListingDetailFinalAsset = {
   fileSize: string;
   mimeType: string;
   uploadedAt: Date;
+  storageDeletedAt: Date | null;
 };
 
 export type ListerListingDetailResult = {
