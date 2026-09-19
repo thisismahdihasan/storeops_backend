@@ -9,6 +9,7 @@ import { notificationPaths } from "./paths/notifications.js";
 import { researchPaths } from "./paths/research.js";
 import { reviewPaths } from "./paths/reviews.js";
 import { systemPaths } from "./paths/system.js";
+import { storageCleanupPaths } from "./paths/storageCleanup.js";
 import { openApiTags } from "./tags.js";
 import { workspacePaths } from "./paths/workspaces.js";
 
@@ -23,6 +24,7 @@ const paths: OpenApiPathMap = {
   ...notificationPaths,
   ...dashboardPaths,
   ...systemPaths,
+  ...storageCleanupPaths,
 };
 
 export const openApiDocument = {

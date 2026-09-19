@@ -356,6 +356,72 @@ export const openApiComponents = {
         storageDeletedAt: { ...dateTime, nullable: true },
       },
     },
+    StorageCleanupCandidate: {
+      type: "object",
+      required: ["finalAssetId", "researchItemId", "etsyListingId", "title", "fileName", "fileSize", "uploadedAt", "listedAt", "storageDeletedAt"],
+      properties: {
+        finalAssetId: stringId,
+        researchItemId: stringId,
+        etsyListingId: { type: "string" },
+        title: { type: "string", nullable: true },
+        fileName: { type: "string" },
+        fileSize: { type: "string", pattern: "^\\d+$", description: "Decimal byte count." },
+        uploadedAt: dateTime,
+        listedAt: dateTime,
+        storageDeletedAt: { ...dateTime, nullable: true },
+      },
+    },
+    FinalAssetStorageMetric: {
+      type: "object",
+      required: ["count", "bytes"],
+      properties: {
+        count: { type: "integer", minimum: 0 },
+        bytes: { type: "string", pattern: "^\\d+$", description: "Decimal byte count." },
+      },
+    },
+    FinalAssetStorageMetrics: {
+      type: "object",
+      required: ["active", "reclaimable", "cleaned"],
+      properties: {
+        active: { $ref: "#/components/schemas/FinalAssetStorageMetric" },
+        reclaimable: { $ref: "#/components/schemas/FinalAssetStorageMetric" },
+        cleaned: { $ref: "#/components/schemas/FinalAssetStorageMetric" },
+      },
+    },
+    FinalAssetCleanupResult: {
+      type: "object",
+      required: ["finalAssetId", "status", "reclaimedBytes", "storageDeletedAt"],
+      properties: {
+        finalAssetId: stringId,
+        status: { type: "string", enum: ["CLEANED", "ALREADY_CLEANED"] },
+        reclaimedBytes: { type: "string", pattern: "^\\d+$", description: "Decimal byte count." },
+        storageDeletedAt: dateTime,
+      },
+    },
+    BulkFinalAssetCleanupFailure: {
+      type: "object",
+      required: ["finalAssetId", "reason"],
+      properties: {
+        finalAssetId: stringId,
+        reason: { type: "string" },
+      },
+    },
+    BulkFinalAssetCleanupResult: {
+      type: "object",
+      required: ["requestedCount", "cleanedCount", "alreadyCleanedCount", "failedCount", "ineligibleCount", "reclaimedBytes", "failed"],
+      properties: {
+        requestedCount: { type: "integer", minimum: 0 },
+        cleanedCount: { type: "integer", minimum: 0 },
+        alreadyCleanedCount: { type: "integer", minimum: 0 },
+        failedCount: { type: "integer", minimum: 0 },
+        ineligibleCount: { type: "integer", minimum: 0 },
+        reclaimedBytes: { type: "string", pattern: "^\\d+$", description: "Decimal byte count." },
+        failed: {
+          type: "array",
+          items: { $ref: "#/components/schemas/BulkFinalAssetCleanupFailure" },
+        },
+      },
+    },
     Notification: {
       type: "object",
       required: ["id", "type", "title", "message", "researchItemId", "workspaceId", "isRead", "createdAt"],

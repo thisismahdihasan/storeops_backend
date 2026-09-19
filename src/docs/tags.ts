@@ -9,5 +9,6 @@ export const openApiTags = [
   { name: "Listing", description: "Lister workflow and private asset delivery." },
   { name: "Notifications", description: "Authenticated user notifications." },
   { name: "Admin Dashboard", description: "Workspace administration metrics." },
+  { name: "Storage Cleanup", description: "Workspace Final ZIP storage cleanup." },
   { name: "Internal", description: "Backend maintenance operations." },
 ];
