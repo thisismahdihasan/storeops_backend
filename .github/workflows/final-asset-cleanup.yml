@@ -1,0 +1,30 @@
+name: Final Asset Cleanup
+
+on:
+  schedule:
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-asset-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Run Final Asset Cleanup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call cleanup endpoint
+        env:
+          STOREOPS_API_URL: ${{ secrets.STOREOPS_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          BASE_URL="${STOREOPS_API_URL%/}"
+          curl --fail-with-body --show-error --silent \
+            -X POST "${BASE_URL}/api/v1/system/cleanup/final-assets" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -d '{}'
