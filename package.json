@@ -4,12 +4,12 @@
   "description": "Backend API for StoreOps",
   "type": "module",
   "main": "dist/server.js",
-  "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit"
-  },
+"scripts": {
+  "dev": "tsx watch src/server.ts",
+  "build": "prisma generate && tsc",
+  "start": "node dist/server.js",
+  "typecheck": "tsc --noEmit"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
