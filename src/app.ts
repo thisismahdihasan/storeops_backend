@@ -11,6 +11,14 @@ import { DocsRoutes } from "./docs/docs.route.js";
 
 const app: Express = express();
 
+// Trust exactly one upstream proxy hop.
+// In production: cloudflared connects to Express over localhost:5000 (loopback).
+// Cloudflare sets X-Forwarded-For to the real client IP before cloudflared forwards it.
+// Setting trust proxy = 1 tells Express to trust that single loopback hop, so req.ip
+// and express-rate-limit resolve the real client IP rather than 127.0.0.1.
+// Using `true` would be unnecessarily permissive; `1` is the minimum safe value here.
+app.set("trust proxy", 1);
+
 // 1. Helmet for security headers
 app.use(helmet());
 
