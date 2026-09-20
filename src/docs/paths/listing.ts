@@ -217,9 +217,9 @@ export const listingPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/listing/assets/{assetId}/download": {
     get: {
       tags: ["Listing"], summary: "Download an authorized private final asset", security: [{ cookieAuth: [] }],
-      description: "Returns a binary attachment to the current assigned LISTER for a READY_FOR_LISTING, LISTING_IN_PROGRESS, or LISTED item.",
+      description: "After the same authorization and workflow checks, returns a no-store redirect to a short-lived private Cloudflare R2 attachment URL for the current assigned LISTER. The signed URL is not returned in JSON.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/AssetId" }],
-      responses: { "200": { description: "Authorized binary attachment.", headers: { "Content-Type": { schema: { type: "string" }, description: "Recorded safe asset MIME type, with octet-stream fallback." }, "Content-Length": { schema: { type: "string" }, description: "Recorded byte length." }, "Content-Disposition": { schema: { type: "string" }, description: "Attachment filename disposition." } }, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } }, "401": jsonError("Authentication is required."), "403": jsonError("Explicit LISTER role and current assignment are required."), "404": jsonError("Final asset or object was not found."), "409": jsonError("Final asset is unavailable at this workflow stage."), "410": jsonError("The production ZIP package for this listed item has been removed from storage."), "502": jsonError("Storage retrieval failed."), "503": jsonError("Storage service is unavailable.") },
+      responses: { "302": { description: "Authorized no-store redirect. Location is a short-lived private Cloudflare R2 attachment URL." }, "401": jsonError("Authentication is required."), "403": jsonError("Explicit LISTER role and current assignment are required."), "404": jsonError("Final asset was not found."), "409": jsonError("Final asset is unavailable at this workflow stage."), "410": jsonError("The production ZIP package for this listed item has been removed from storage.") },
     },
   },
 };

@@ -27,6 +27,13 @@ export type CreateMultipartUploadInput = {
   mimeType: string;
 };
 
+export type PresignedDownloadInput = {
+  storageKey: string;
+  fileName: string;
+  mimeType: string;
+  expiresInSeconds: number;
+};
+
 export type PresignedUploadPartInput = {
   storageKey: string;
   uploadId: string;
@@ -210,6 +217,48 @@ export const deleteObject = async (storageKey: string): Promise<void> => {
       Bucket: env.R2_BUCKET_NAME,
       Key: storageKey,
     })
+  );
+};
+
+const safeDownloadContentType = (mimeType: string): string => {
+  const normalized = mimeType.trim().toLowerCase();
+  return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(normalized)
+    ? normalized
+    : "application/octet-stream";
+};
+
+const contentDispositionForFileName = (fileName: string): string => {
+  const safeFileName = sanitizeFinalAssetFileName(fileName)
+    .normalize("NFC")
+    .replace(/[\\/:*?"<>|]/g, "_");
+  const asciiFallback = safeFileName
+    .replace(/[^A-Za-z0-9._ -]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim() || "download";
+  const encodedFileName = encodeURIComponent(safeFileName).replace(
+    /['()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFileName}`;
+};
+
+// Signs a short-lived browser-direct download without fetching the object body through the backend.
+export const getPresignedDownloadUrl = async ({
+  storageKey,
+  fileName,
+  mimeType,
+  expiresInSeconds,
+}: PresignedDownloadInput): Promise<string> => {
+  return getSignedUrl(
+    r2Client,
+    new GetObjectCommand({
+      Bucket: env.R2_BUCKET_NAME,
+      Key: storageKey,
+      ResponseContentDisposition: contentDispositionForFileName(fileName),
+      ResponseContentType: safeDownloadContentType(mimeType),
+    }),
+    { expiresIn: expiresInSeconds }
   );
 };
 

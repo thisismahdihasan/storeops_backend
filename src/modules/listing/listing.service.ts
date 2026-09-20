@@ -9,7 +9,7 @@ import {
 } from "./listing.assignment.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
-import { getObjectStream } from "../storage/r2.js";
+import { getPresignedDownloadUrl } from "../storage/r2.js";
 import {
   AdminListingListItem,
   AdminListingListResult,
@@ -483,7 +483,7 @@ export const startListingWork = async (
   );
 };
 
-// Resolves an authorized final-asset media stream without exposing storage identifiers or credentials.
+// Resolves an authorized, browser-direct final-asset download without exposing storage identifiers or credentials.
 export const getAuthorizedFinalAssetDownload = async (
   workspaceId: string,
   assetId: string,
@@ -497,17 +497,13 @@ export const getAuthorizedFinalAssetDownload = async (
       },
     },
     select: {
-      id: true,
       fileName: true,
-      fileSize: true,
       mimeType: true,
       storageKey: true,
       storageDeletedAt: true,
       researchItemId: true,
       researchItem: {
         select: {
-          id: true,
-          workspaceId: true,
           status: true,
         },
       },
@@ -546,13 +542,15 @@ export const getAuthorizedFinalAssetDownload = async (
     );
   }
 
-  const stream = await getObjectStream(asset.storageKey);
+  const downloadUrl = await getPresignedDownloadUrl({
+    storageKey: asset.storageKey,
+    fileName: asset.fileName,
+    mimeType: asset.mimeType,
+    expiresInSeconds: 120,
+  });
 
   return {
-    fileName: asset.fileName,
-    fileSize: asset.fileSize,
-    mimeType: asset.mimeType,
-    stream,
+    downloadUrl,
   };
 };
 
