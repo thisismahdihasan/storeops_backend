@@ -167,6 +167,7 @@ export const getResearchReferenceImage = async (
 
   if (!download && isCloudinaryUrl(referenceImageUrl)) {
     res.setHeader("Cache-Control", "private, max-age=86400");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.redirect(302, referenceImageUrl);
     return;
   }
@@ -182,6 +183,7 @@ export const getResearchReferenceImage = async (
   const filename = `research-reference-${researchItemId}.${ext}`;
   const dispositionType = download ? "attachment" : "inline";
 
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   res.setHeader("Content-Type", imageResult.contentType);
   res.setHeader("Cache-Control", "private, max-age=86400");
   res.setHeader(
