@@ -111,6 +111,20 @@ export const isPrivateOrLocalIp = (rawIp: string): boolean => {
   return false;
 };
 
+// Determines whether an image URL is a trusted Cloudinary asset (https://res.cloudinary.com).
+export const isCloudinaryUrl = (rawUrl: string): boolean => {
+  try {
+    const parsed = new URL(rawUrl);
+    return (
+      parsed.protocol === "https:" &&
+      parsed.hostname.toLowerCase() === "res.cloudinary.com" &&
+      (parsed.port === "" || parsed.port === "443")
+    );
+  } catch {
+    return false;
+  }
+};
+
 // Resolves hostnames via DNS and confirms destination addresses do not point to internal or private networks (SSRF defense).
 export const validateUrlSafety = async (rawUrl: string): Promise<URL> => {
   let parsed: URL;

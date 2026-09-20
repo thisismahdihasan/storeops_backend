@@ -8,6 +8,7 @@ import { ApiResponse } from "../../shared/ApiResponse.js";
 import {
   createByteLimitTransform,
   fetchSafeImageStream,
+  isCloudinaryUrl,
 } from "./research.referenceImage.js";
 import { assignUnassignedResearchBacklog } from "./research.assignment.js";
 import * as researchService from "./research.service.js";
@@ -145,7 +146,7 @@ export const getResearchItemById = async (
   });
 };
 
-// Proxies the reference image stream with SSRF protection, size caps, and preview/download disposition.
+// Proxies or redirects the reference image stream with SSRF protection, size caps, and preview/download disposition.
 export const getResearchReferenceImage = async (
   req: Request,
   res: Response,
@@ -164,6 +165,12 @@ export const getResearchReferenceImage = async (
     authReq.workspaceMembership.roles
   );
 
+  if (!download && isCloudinaryUrl(referenceImageUrl)) {
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.redirect(302, referenceImageUrl);
+    return;
+  }
+
   const imageResult = await fetchSafeImageStream(referenceImageUrl);
 
   let ext = "jpg";
@@ -176,7 +183,7 @@ export const getResearchReferenceImage = async (
   const dispositionType = download ? "attachment" : "inline";
 
   res.setHeader("Content-Type", imageResult.contentType);
-  res.setHeader("Cache-Control", "private, max-age=300");
+  res.setHeader("Cache-Control", "private, max-age=86400");
   res.setHeader(
     "Content-Disposition",
     `${dispositionType}; filename="${filename}"`

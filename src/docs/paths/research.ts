@@ -450,10 +450,50 @@ export const researchPaths: OpenApiPathMap = {
       },
     },
     get: {
-      tags: ["Research"], summary: "Proxy a research reference image", security: [{ cookieAuth: [] }],
-      description: "Returns a protected binary image. ADMIN users may access any workspace item; RESEARCHER users may access only items they created. Existing DESIGNER and LISTER assigned-work UIs use this media endpoint and must own the current design or listing assignment respectively. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
-      parameters: [...workspaceAndResearchParameters, { name: "download", in: "query", schema: { type: "string", enum: ["true", "false", "1", "0"] } }],
-      responses: { "200": { description: "Image stream with image Content-Type and Content-Disposition.", headers: { "Content-Disposition": { schema: { type: "string" } }, "Cache-Control": { schema: { type: "string" } } }, content: { "image/*": { schema: { type: "string", format: "binary" } } } }, "401": jsonError("Authentication is required."), "403": jsonError("Workspace access is required."), "404": jsonError("Item or reference image was not found."), "502": jsonError("Reference image could not be safely loaded."), "504": jsonError("Reference image request timed out.") },
+      tags: ["Research"],
+      summary: "Retrieve a research reference image",
+      security: [{ cookieAuth: [] }],
+      description:
+        "Returns a protected reference image. Normal view requests for Cloudinary-hosted assets return an HTTP 302 redirect to Cloudinary CDN with private 24h caching. External/Etsy-backed images and explicit download requests (download=true or download=1) are streamed through the backend with SSRF protections and private 24h caching. ADMIN users may access any workspace item; RESEARCHER users may access only items they created. Existing DESIGNER and LISTER assigned-work UIs use this media endpoint and must own the current design or listing assignment respectively. `download=true` or `download=1` uses attachment disposition; other accepted values use inline disposition.",
+      parameters: [
+        ...workspaceAndResearchParameters,
+        {
+          name: "download",
+          in: "query",
+          schema: { type: "string", enum: ["true", "false", "1", "0"] },
+        },
+      ],
+      responses: {
+        "200": {
+          description:
+            "Image stream with image Content-Type and Content-Disposition (for external images or explicit downloads).",
+          headers: {
+            "Content-Disposition": { schema: { type: "string" } },
+            "Cache-Control": { schema: { type: "string" } },
+          },
+          content: {
+            "image/*": {
+              schema: { type: "string", format: "binary" },
+            },
+          },
+        },
+        "302": {
+          description:
+            "Redirect to Cloudinary CDN for trusted Cloudinary reference images on normal view requests.",
+          headers: {
+            Location: {
+              schema: { type: "string", format: "uri" },
+              description: "Direct Cloudinary CDN URL",
+            },
+            "Cache-Control": { schema: { type: "string" } },
+          },
+        },
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Workspace access is required."),
+        "404": jsonError("Item or reference image was not found."),
+        "502": jsonError("Reference image could not be safely loaded."),
+        "504": jsonError("Reference image request timed out."),
+      },
     },
   },
   "/api/v1/workspaces/{workspaceId}/research-items/{researchItemId}/designer": {
