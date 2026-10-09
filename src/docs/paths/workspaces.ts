@@ -72,6 +72,15 @@ const transferWorkspaceOwnershipBody = {
   },
 };
 
+const scheduleWorkspaceDeletionBody = {
+  type: "object",
+  additionalProperties: false,
+  required: ["workspaceName"],
+  properties: {
+    workspaceName: { type: "string", minLength: 1 },
+  },
+};
+
 const workspaceMemberAssignmentAvailabilityBody = {
   type: "object",
   additionalProperties: false,
@@ -91,13 +100,15 @@ export const workspacePaths: OpenApiPathMap = {
   "/api/v1/workspaces": {
     get: {
       tags: ["Workspaces"], summary: "List workspaces available to the current user",
-      description: "Returns the authenticated user's explicit memberships for workspace and role restoration. Users with no memberships receive an empty workspaces array.",
+      description: "Returns the authenticated user's explicit memberships for workspace and role restoration. Pending-deletion workspaces remain visible and include authoritative deletion timestamps. Users with no memberships receive an empty workspaces array.",
       security: [{ cookieAuth: [] }],
       responses: {
         "200": jsonSuccess("Workspaces retrieved successfully.", {
           type: "object", required: ["workspaces"], properties: {
-            workspaces: { type: "array", items: { type: "object", required: ["id", "name", "ownerId", "createdAt", "updatedAt", "membership"], properties: {
+            workspaces: { type: "array", items: { type: "object", required: ["id", "name", "ownerId", "deletionScheduledAt", "permanentDeletionAt", "createdAt", "updatedAt", "membership"], properties: {
               id: { type: "string" }, name: { type: "string" }, ownerId: { type: "string" },
+              deletionScheduledAt: { type: "string", format: "date-time", nullable: true },
+              permanentDeletionAt: { type: "string", format: "date-time", nullable: true, description: "Derived from deletionScheduledAt plus the fixed 72-hour grace period; not stored." },
               createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" },
               membership: { type: "object", required: ["id", "roles", "createdAt"], properties: {
                 id: { type: "string" }, roles: { type: "array", items: { $ref: "#/components/schemas/WorkspaceRole" } }, createdAt: { type: "string", format: "date-time" },
@@ -212,7 +223,41 @@ export const workspacePaths: OpenApiPathMap = {
         "401": jsonError("Authentication is required."),
         "403": jsonError("Only the workspace owner can transfer ownership."),
         "404": jsonError("Workspace or target workspace member not found."),
-        "409": jsonError("Target user is already the workspace owner."),
+        "409": jsonError("Target user is already the workspace owner, or workspace deletion is scheduled."),
+      },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/schedule-deletion": {
+    post: {
+      tags: ["Workspaces"],
+      summary: "Schedule workspace deletion",
+      description: "Owner-only action. Requires exact case-sensitive workspace-name confirmation and schedules deletion after a fixed 72-hour grace period. No data is permanently deleted by this endpoint.",
+      security: [{ cookieAuth: [] }],
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      requestBody: { required: true, content: { "application/json": { schema: scheduleWorkspaceDeletionBody } } },
+      responses: {
+        "200": jsonSuccess("Workspace deletion scheduled successfully", { type: "object", required: ["workspace"], properties: { workspace: { $ref: "#/components/schemas/Workspace" } } }),
+        "400": jsonError("Invalid workspace ID, request body, or workspace name confirmation."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Only the workspace owner can schedule deletion."),
+        "404": jsonError("Workspace not found."),
+        "409": jsonError("Workspace deletion is already scheduled."),
+      },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/restore": {
+    post: {
+      tags: ["Workspaces"],
+      summary: "Restore workspace",
+      description: "Owner-only action available while deletion is pending. Clears the scheduled deletion and immediately reactivates normal workspace operations.",
+      security: [{ cookieAuth: [] }],
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      responses: {
+        "200": jsonSuccess("Workspace restored successfully", { type: "object", required: ["workspace"], properties: { workspace: { $ref: "#/components/schemas/Workspace" } } }),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Only the workspace owner can restore this workspace."),
+        "404": jsonError("Workspace not found."),
+        "409": jsonError("Workspace is not scheduled for deletion."),
       },
     },
   },

@@ -6,6 +6,7 @@ model Workspace {
   listerAutoAssignmentEnabled   Boolean  @default(true)
   finalAssetAutoCleanupEnabled  Boolean  @default(false)
   finalAssetRetentionDays       Int      @default(30)
+  deletionScheduledAt           DateTime?
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
 

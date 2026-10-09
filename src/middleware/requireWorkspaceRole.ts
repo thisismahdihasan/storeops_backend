@@ -43,6 +43,9 @@ const authorizeWorkspaceMembership = async (
       id: true,
       workspaceId: true,
       roles: true,
+      workspace: {
+        select: { deletionScheduledAt: true },
+      },
     },
   });
 
@@ -50,8 +53,16 @@ const authorizeWorkspaceMembership = async (
     throw new ApiError(403, "You do not have access to this workspace");
   }
 
-  (req as WorkspaceAuthorizedRequest).workspaceMembership = membership;
-  return membership;
+  if (membership.workspace.deletionScheduledAt !== null) {
+    throw new ApiError(
+      403,
+      "Workspace is scheduled for deletion. Access to normal operations is blocked."
+    );
+  }
+
+  const { workspace: _workspace, ...workspaceMembership } = membership;
+  (req as WorkspaceAuthorizedRequest).workspaceMembership = workspaceMembership;
+  return workspaceMembership;
 };
 
 // Verifies active membership without imposing a role requirement.

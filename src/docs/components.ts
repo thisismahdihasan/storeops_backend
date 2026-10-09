@@ -199,13 +199,15 @@ export const openApiComponents = {
     },
     Workspace: {
       type: "object",
-      required: ["id", "name", "ownerId", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled", "finalAssetAutoCleanupEnabled", "finalAssetRetentionDays", "createdAt", "updatedAt"],
+      required: ["id", "name", "ownerId", "designerAutoAssignmentEnabled", "listerAutoAssignmentEnabled", "finalAssetAutoCleanupEnabled", "finalAssetRetentionDays", "deletionScheduledAt", "permanentDeletionAt", "createdAt", "updatedAt"],
       properties: {
         id: stringId, name: { type: "string" }, ownerId: stringId,
         designerAutoAssignmentEnabled: { type: "boolean" },
         listerAutoAssignmentEnabled: { type: "boolean" },
         finalAssetAutoCleanupEnabled: { type: "boolean" },
         finalAssetRetentionDays: { type: "integer", minimum: 1, maximum: 365 },
+        deletionScheduledAt: { ...dateTime, nullable: true },
+        permanentDeletionAt: { ...dateTime, nullable: true, description: "Derived from deletionScheduledAt plus the fixed 72-hour grace period; not stored." },
         createdAt: dateTime, updatedAt: dateTime,
       },
     },

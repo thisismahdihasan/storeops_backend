@@ -6,6 +6,7 @@ import { ACTIVE_DESIGN_STATUSES } from "../research/research.assignment.js";
 import { acquireWorkspaceMemberMutationLock } from "./workspace.member-lock.js";
 import {
   CreateWorkspaceInput,
+  ScheduleWorkspaceDeletionInput,
   TransferWorkspaceOwnershipInput,
   UpdateWorkspaceMemberAssignmentAvailabilityInput,
   UpdateWorkspaceMemberRolesInput,
@@ -15,6 +16,8 @@ import {
   DeleteWorkspaceMemberResult,
   GetWorkspaceMembersResult,
   GetUserWorkspacesResult,
+  RestoreWorkspaceResult,
+  ScheduleWorkspaceDeletionResult,
   TransferWorkspaceOwnershipResult,
   UpdateWorkspaceMemberAssignmentAvailabilityResult,
   UpdateWorkspaceMemberRolesResult,
@@ -28,9 +31,26 @@ const safeWorkspaceSelect = {
   listerAutoAssignmentEnabled: true,
   finalAssetAutoCleanupEnabled: true,
   finalAssetRetentionDays: true,
+  deletionScheduledAt: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+const WORKSPACE_DELETION_GRACE_PERIOD_MS = 72 * 60 * 60 * 1000;
+
+const getPermanentDeletionAt = (
+  deletionScheduledAt: Date | null
+): Date | null =>
+  deletionScheduledAt
+    ? new Date(deletionScheduledAt.getTime() + WORKSPACE_DELETION_GRACE_PERIOD_MS)
+    : null;
+
+const toSafeWorkspace = (
+  workspace: Omit<SafeWorkspace, "permanentDeletionAt">
+): SafeWorkspace => ({
+  ...workspace,
+  permanentDeletionAt: getPermanentDeletionAt(workspace.deletionScheduledAt),
+});
 
 const safeWorkspaceMemberSelect = {
   id: true,
@@ -225,7 +245,7 @@ export const createWorkspace = async (
     });
 
     return {
-      workspace,
+      workspace: toSafeWorkspace(workspace),
       membership,
     };
   });
@@ -254,7 +274,7 @@ export const getUserWorkspaces = async (
 
   return {
     workspaces: memberships.map((membership) => ({
-      ...membership.workspace,
+      ...toSafeWorkspace(membership.workspace),
       membership: {
         id: membership.id,
         roles: membership.roles,
@@ -520,7 +540,7 @@ export const transferWorkspaceOwnership = async (
 
     const workspace = await tx.workspace.findUnique({
       where: { id: workspaceId },
-      select: { id: true, ownerId: true },
+      select: { id: true, ownerId: true, deletionScheduledAt: true },
     });
 
     if (!workspace) {
@@ -529,6 +549,10 @@ export const transferWorkspaceOwnership = async (
 
     if (workspace.ownerId !== actorUserId) {
       throw new ApiError(403, "Only the workspace owner can transfer ownership.");
+    }
+
+    if (workspace.deletionScheduledAt !== null) {
+      throw new ApiError(409, "Workspace deletion is already scheduled.");
     }
 
     if (input.targetUserId === workspace.ownerId) {
@@ -567,7 +591,82 @@ export const transferWorkspaceOwnership = async (
       select: safeWorkspaceSelect,
     });
 
-    return { workspace: updatedWorkspace };
+    return { workspace: toSafeWorkspace(updatedWorkspace) };
+  });
+};
+
+// Schedules workspace deletion after the fixed 72-hour grace period.
+export const scheduleWorkspaceDeletion = async (
+  workspaceId: string,
+  actorUserId: string,
+  input: ScheduleWorkspaceDeletionInput
+): Promise<ScheduleWorkspaceDeletionResult> => {
+  return await prisma.$transaction(async (tx) => {
+    await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+
+    const workspace = await tx.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, name: true, ownerId: true, deletionScheduledAt: true },
+    });
+
+    if (!workspace) {
+      throw new ApiError(404, "Workspace not found");
+    }
+
+    if (workspace.ownerId !== actorUserId) {
+      throw new ApiError(403, "Only the workspace owner can schedule deletion.");
+    }
+
+    if (workspace.deletionScheduledAt !== null) {
+      throw new ApiError(409, "Workspace deletion is already scheduled.");
+    }
+
+    if (input.workspaceName !== workspace.name) {
+      throw new ApiError(400, "Workspace name confirmation does not match.");
+    }
+
+    const updatedWorkspace = await tx.workspace.update({
+      where: { id: workspaceId },
+      data: { deletionScheduledAt: new Date() },
+      select: safeWorkspaceSelect,
+    });
+
+    return { workspace: toSafeWorkspace(updatedWorkspace) };
+  });
+};
+
+// Restores a workspace by clearing its scheduled deletion timestamp.
+export const restoreWorkspace = async (
+  workspaceId: string,
+  actorUserId: string
+): Promise<RestoreWorkspaceResult> => {
+  return await prisma.$transaction(async (tx) => {
+    await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+
+    const workspace = await tx.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, ownerId: true, deletionScheduledAt: true },
+    });
+
+    if (!workspace) {
+      throw new ApiError(404, "Workspace not found");
+    }
+
+    if (workspace.ownerId !== actorUserId) {
+      throw new ApiError(403, "Only the workspace owner can restore this workspace.");
+    }
+
+    if (workspace.deletionScheduledAt === null) {
+      throw new ApiError(409, "Workspace is not scheduled for deletion.");
+    }
+
+    const updatedWorkspace = await tx.workspace.update({
+      where: { id: workspaceId },
+      data: { deletionScheduledAt: null },
+      select: safeWorkspaceSelect,
+    });
+
+    return { workspace: toSafeWorkspace(updatedWorkspace) };
   });
 };
 
@@ -605,6 +704,6 @@ export const updateWorkspaceSettings = async (
       select: safeWorkspaceSelect,
     });
 
-    return updatedWorkspace;
+    return toSafeWorkspace(updatedWorkspace);
   });
 };

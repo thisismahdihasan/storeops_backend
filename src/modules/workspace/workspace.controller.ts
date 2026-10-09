@@ -4,6 +4,7 @@ import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as workspaceService from "./workspace.service.js";
 import {
   createWorkspaceSchema,
+  scheduleWorkspaceDeletionSchema,
   transferWorkspaceOwnershipSchema,
   updateWorkspaceMemberAssignmentAvailabilitySchema,
   updateWorkspaceMemberRolesSchema,
@@ -143,6 +144,46 @@ export const transferWorkspaceOwnership = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Workspace ownership transferred successfully",
+    data: result,
+  });
+};
+
+// Schedules deletion after exact workspace-name confirmation.
+export const scheduleWorkspaceDeletion = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { workspaceId } = workspaceIdParamsSchema.parse(req.params);
+  const validatedInput = scheduleWorkspaceDeletionSchema.parse(req.body);
+  const result = await workspaceService.scheduleWorkspaceDeletion(
+    workspaceId,
+    authReq.user.id,
+    validatedInput
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Workspace deletion scheduled successfully",
+    data: result,
+  });
+};
+
+// Clears a scheduled workspace deletion.
+export const restoreWorkspace = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { workspaceId } = workspaceIdParamsSchema.parse(req.params);
+  const result = await workspaceService.restoreWorkspace(
+    workspaceId,
+    authReq.user.id
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Workspace restored successfully",
     data: result,
   });
 };

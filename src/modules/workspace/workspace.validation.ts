@@ -41,6 +41,14 @@ export type TransferWorkspaceOwnershipInput = z.infer<
   typeof transferWorkspaceOwnershipSchema
 >;
 
+export const scheduleWorkspaceDeletionSchema = z.object({
+  workspaceName: z.string().trim().min(1, "Workspace name is required"),
+}).strict();
+
+export type ScheduleWorkspaceDeletionInput = z.infer<
+  typeof scheduleWorkspaceDeletionSchema
+>;
+
 export const assignmentAvailabilityRoleSchema = z.enum([
   WorkspaceRole.DESIGNER,
   WorkspaceRole.LISTER,

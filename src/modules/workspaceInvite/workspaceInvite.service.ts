@@ -209,6 +209,7 @@ const getAdminWorkspace = async (callerUserId: string, workspaceId: string) => {
       workspace: {
         select: {
           name: true,
+          deletionScheduledAt: true,
         },
       },
     },
@@ -216,6 +217,13 @@ const getAdminWorkspace = async (callerUserId: string, workspaceId: string) => {
 
   if (!membership || !membership.roles.includes(WorkspaceRole.ADMIN)) {
     throw new ApiError(403, "Only workspace admins can manage invites");
+  }
+
+  if (membership.workspace.deletionScheduledAt !== null) {
+    throw new ApiError(
+      403,
+      "Workspace is scheduled for deletion. Access to normal operations is blocked."
+    );
   }
 
   return {
@@ -244,11 +252,18 @@ export const createWorkspaceInvite = async (
       select: {
         id: true,
         name: true,
+        deletionScheduledAt: true,
       },
       take: 2,
     });
 
     if (ownedWorkspaces.length === 1) {
+      if (ownedWorkspaces[0].deletionScheduledAt !== null) {
+        throw new ApiError(
+          403,
+          "Workspace is scheduled for deletion. Access to normal operations is blocked."
+        );
+      }
       workspaceId = ownedWorkspaces[0].id;
       workspaceName = ownedWorkspaces[0].name;
     } else if (ownedWorkspaces.length > 1) {
@@ -268,6 +283,7 @@ export const createWorkspaceInvite = async (
           workspace: {
             select: {
               name: true,
+              deletionScheduledAt: true,
             },
           },
         },
@@ -281,6 +297,13 @@ export const createWorkspaceInvite = async (
         throw new ApiError(
           400,
           "You are an admin in multiple workspaces. Please specify the target workspace ID in the request route."
+        );
+      }
+
+      if (adminMemberships[0].workspace.deletionScheduledAt !== null) {
+        throw new ApiError(
+          403,
+          "Workspace is scheduled for deletion. Access to normal operations is blocked."
         );
       }
 
@@ -616,6 +639,7 @@ export const acceptWorkspaceInvite = async (
             select: {
               id: true,
               name: true,
+              deletionScheduledAt: true,
             },
           },
         },
@@ -627,6 +651,10 @@ export const acceptWorkspaceInvite = async (
 
       if (invite.acceptedAt !== null) {
         throw new ApiError(409, "Invitation has already been accepted");
+      }
+
+      if (invite.workspace.deletionScheduledAt !== null) {
+        throw new ApiError(409, "Workspace deletion is already scheduled.");
       }
 
       if (invite.expiresAt.getTime() <= Date.now()) {

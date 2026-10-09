@@ -11,6 +11,8 @@ import {
   deleteWorkspaceMember,
   getWorkspaceMembers,
   getUserWorkspaces,
+  restoreWorkspace,
+  scheduleWorkspaceDeletion,
   transferWorkspaceOwnership,
   updateWorkspaceMemberAssignmentAvailability,
   updateWorkspaceMemberRoles,
@@ -34,6 +36,18 @@ const router: Router = Router();
 
 router.get("/", requireAuth, catchAsync(getUserWorkspaces));
 router.post("/", requireAuth, catchAsync(createWorkspace));
+router.post(
+  "/:workspaceId/schedule-deletion",
+  requireAuth,
+  requireWorkspaceOwner,
+  catchAsync(scheduleWorkspaceDeletion)
+);
+router.post(
+  "/:workspaceId/restore",
+  requireAuth,
+  requireWorkspaceOwner,
+  catchAsync(restoreWorkspace)
+);
 router.post(
   "/:workspaceId/transfer-ownership",
   requireAuth,

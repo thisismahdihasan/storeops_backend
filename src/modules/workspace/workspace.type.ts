@@ -8,6 +8,8 @@ export type SafeWorkspace = {
   listerAutoAssignmentEnabled: boolean;
   finalAssetAutoCleanupEnabled: boolean;
   finalAssetRetentionDays: number;
+  deletionScheduledAt: Date | null;
+  permanentDeletionAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -74,5 +76,13 @@ export type DeleteWorkspaceMemberResult = {
 };
 
 export type TransferWorkspaceOwnershipResult = {
+  workspace: SafeWorkspace;
+};
+
+export type ScheduleWorkspaceDeletionResult = {
+  workspace: SafeWorkspace;
+};
+
+export type RestoreWorkspaceResult = {
   workspace: SafeWorkspace;
 };
