@@ -4,6 +4,7 @@ import { ApiError } from "../../shared/ApiError.js";
 import { ACTIVE_LISTING_WORKLOAD_STATUSES } from "../listing/listing.assignment.js";
 import { ACTIVE_DESIGN_STATUSES } from "../research/research.assignment.js";
 import { acquireWorkspaceMemberMutationLock } from "./workspace.member-lock.js";
+import { getPermanentDeletionAt } from "./workspace.deletion.js";
 import {
   CreateWorkspaceInput,
   ScheduleWorkspaceDeletionInput,
@@ -35,15 +36,6 @@ const safeWorkspaceSelect = {
   createdAt: true,
   updatedAt: true,
 } as const;
-
-const WORKSPACE_DELETION_GRACE_PERIOD_MS = 72 * 60 * 60 * 1000;
-
-const getPermanentDeletionAt = (
-  deletionScheduledAt: Date | null
-): Date | null =>
-  deletionScheduledAt
-    ? new Date(deletionScheduledAt.getTime() + WORKSPACE_DELETION_GRACE_PERIOD_MS)
-    : null;
 
 const toSafeWorkspace = (
   workspace: Omit<SafeWorkspace, "permanentDeletionAt">
@@ -540,7 +532,11 @@ export const transferWorkspaceOwnership = async (
 
     const workspace = await tx.workspace.findUnique({
       where: { id: workspaceId },
-      select: { id: true, ownerId: true, deletionScheduledAt: true },
+      select: {
+        id: true,
+        ownerId: true,
+        deletionScheduledAt: true,
+      },
     });
 
     if (!workspace) {
@@ -645,7 +641,12 @@ export const restoreWorkspace = async (
 
     const workspace = await tx.workspace.findUnique({
       where: { id: workspaceId },
-      select: { id: true, ownerId: true, deletionScheduledAt: true },
+      select: {
+        id: true,
+        ownerId: true,
+        deletionScheduledAt: true,
+        purgeStartedAt: true,
+      },
     });
 
     if (!workspace) {
@@ -658,6 +659,20 @@ export const restoreWorkspace = async (
 
     if (workspace.deletionScheduledAt === null) {
       throw new ApiError(409, "Workspace is not scheduled for deletion.");
+    }
+
+    if (workspace.purgeStartedAt !== null) {
+      throw new ApiError(
+        409,
+        "Workspace permanent deletion is already in progress."
+      );
+    }
+
+    const permanentDeletionAt = getPermanentDeletionAt(
+      workspace.deletionScheduledAt
+    );
+    if (permanentDeletionAt && new Date() >= permanentDeletionAt) {
+      throw new ApiError(409, "Workspace deletion grace period has expired.");
     }
 
     const updatedWorkspace = await tx.workspace.update({

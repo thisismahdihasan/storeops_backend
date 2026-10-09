@@ -32,7 +32,7 @@ const REVIEW_IMAGE_CLEANUP_LOCK_ID = 837261948;
 let isCleanupInProgress = false;
 
 // Default production destroyer that calls Cloudinary SDK
-const defaultCloudinaryDestroyer: ReviewImageDestroyer = async (
+export const destroyCloudinaryImage: ReviewImageDestroyer = async (
   publicId: string
 ): Promise<ReviewImageDestroyResult> => {
   const client = getCloudinaryClient();
@@ -61,7 +61,7 @@ export const cleanupOldReviewImages = async (
   const cutoffDays = options?.cutoffDays ?? 30;
   const cutoffDate = new Date(now.getTime() - cutoffDays * 24 * 60 * 60 * 1000);
   const batchSize = options?.batchSize ?? 50;
-  const destroyer = options?.destroyImage ?? defaultCloudinaryDestroyer;
+  const destroyer = options?.destroyImage ?? destroyCloudinaryImage;
 
   // 1. In-process check: guard against overlapping runs in the same Node event loop
   if (isCleanupInProgress) {

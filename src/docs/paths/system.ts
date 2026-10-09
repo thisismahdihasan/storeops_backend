@@ -92,4 +92,45 @@ export const systemPaths: OpenApiPathMap = {
       },
     },
   },
+  "/api/v1/system/cleanup/workspaces": {
+    post: {
+      tags: ["Internal"],
+      summary: "Purge expired workspaces",
+      description:
+        "Internal scheduled cleanup endpoint. Send the configured `x-cron-secret` header. Only workspaces whose fixed 72-hour deletion grace period has expired are eligible. External assets are removed before database deletion; processing is bounded and a failure for one workspace does not stop the run.",
+      parameters: [
+        {
+          name: "x-cron-secret",
+          in: "header",
+          required: true,
+          schema: { type: "string" },
+          description: "Configured secret; never expose or persist it in clients.",
+        },
+      ],
+      responses: {
+        "200": jsonSuccess("Workspace purge completed successfully", {
+          type: "object",
+          required: [
+            "status",
+            "scannedCount",
+            "claimedCount",
+            "purgedCount",
+            "failedCount",
+            "skippedCount",
+          ],
+          properties: {
+            status: { type: "string", enum: ["completed", "already_running"] },
+            scannedCount: { type: "integer" },
+            claimedCount: { type: "integer" },
+            purgedCount: { type: "integer" },
+            failedCount: { type: "integer" },
+            skippedCount: { type: "integer" },
+          },
+        }),
+        "400": jsonError("Invalid cleanup body."),
+        "401": jsonError("Cron secret is invalid or missing."),
+        "500": jsonError("Workspace purge failed."),
+      },
+    },
+  },
 };

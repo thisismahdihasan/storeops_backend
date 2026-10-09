@@ -7,6 +7,7 @@ model Workspace {
   finalAssetAutoCleanupEnabled  Boolean  @default(false)
   finalAssetRetentionDays       Int      @default(30)
   deletionScheduledAt           DateTime?
+  purgeStartedAt                DateTime?
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
 
@@ -17,6 +18,7 @@ model Workspace {
   notifications Notification[]
 
   @@index([ownerId])
+  @@index([deletionScheduledAt])
 }
 
 model WorkspaceMember {

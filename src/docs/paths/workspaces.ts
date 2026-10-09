@@ -249,7 +249,7 @@ export const workspacePaths: OpenApiPathMap = {
     post: {
       tags: ["Workspaces"],
       summary: "Restore workspace",
-      description: "Owner-only action available while deletion is pending. Clears the scheduled deletion and immediately reactivates normal workspace operations.",
+      description: "Owner-only action available only before the fixed 72-hour deletion deadline. Clears the scheduled deletion and immediately reactivates normal workspace operations. Restore is rejected after the deadline or once permanent purge has started.",
       security: [{ cookieAuth: [] }],
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
       responses: {
