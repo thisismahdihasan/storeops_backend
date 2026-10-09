@@ -100,6 +100,39 @@ const assertCurrentActorIsAdmin = async (
   }
 };
 
+const getWorkspaceOwnerId = async (
+  tx: Prisma.TransactionClient,
+  workspaceId: string
+): Promise<string> => {
+  const workspace = await tx.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { ownerId: true },
+  });
+
+  if (!workspace) {
+    throw new ApiError(404, "Workspace not found");
+  }
+
+  return workspace.ownerId;
+};
+
+const assertActorCanChangeAdminAuthority = (
+  actorUserId: string,
+  ownerUserId: string,
+  targetRoles: WorkspaceRole[],
+  requestedRoles: WorkspaceRole[]
+): void => {
+  const targetIsAdmin = targetRoles.includes(WorkspaceRole.ADMIN);
+  const requestedIsAdmin = requestedRoles.includes(WorkspaceRole.ADMIN);
+
+  if (targetIsAdmin !== requestedIsAdmin && actorUserId !== ownerUserId) {
+    throw new ApiError(
+      403,
+      "Only the workspace owner can change Admin roles."
+    );
+  }
+};
+
 const assertWorkspaceRetainsAdmin = async (
   tx: Prisma.TransactionClient,
   workspaceId: string
@@ -171,48 +204,29 @@ export const createWorkspace = async (
   userId: string,
   input: CreateWorkspaceInput
 ): Promise<CreateWorkspaceResult> => {
-  const existingWorkspace = await prisma.workspace.findUnique({
-    where: { ownerId: userId },
-    select: { id: true },
-  });
-
-  if (existingWorkspace) {
-    throw new ApiError(409, "User already owns a workspace");
-  }
-
-  try {
-    return await prisma.$transaction(async (tx) => {
-      const workspace = await tx.workspace.create({
-        data: {
-          name: input.name,
-          ownerId: userId,
-        },
-        select: safeWorkspaceSelect,
-      });
-
-      const membership = await tx.workspaceMember.create({
-        data: {
-          workspaceId: workspace.id,
-          userId,
-          roles: [WorkspaceRole.ADMIN],
-        },
-        select: safeWorkspaceMemberSelect,
-      });
-
-      return {
-        workspace,
-        membership,
-      };
+  return await prisma.$transaction(async (tx) => {
+    const workspace = await tx.workspace.create({
+      data: {
+        name: input.name,
+        ownerId: userId,
+      },
+      select: safeWorkspaceSelect,
     });
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      throw new ApiError(409, "User already owns a workspace");
-    }
-    throw error;
-  }
+
+    const membership = await tx.workspaceMember.create({
+      data: {
+        workspaceId: workspace.id,
+        userId,
+        roles: [WorkspaceRole.ADMIN],
+      },
+      select: safeWorkspaceMemberSelect,
+    });
+
+    return {
+      workspace,
+      membership,
+    };
+  });
 };
 
 // Returns the authenticated user's workspace memberships for session restoration and workspace selection.
@@ -293,6 +307,7 @@ export const updateWorkspaceMemberRoles = async (
   return await prisma.$transaction(async (tx) => {
     await acquireWorkspaceMemberMutationLock(tx, workspaceId);
     await assertCurrentActorIsAdmin(tx, workspaceId, actorUserId);
+    const ownerUserId = await getWorkspaceOwnerId(tx, workspaceId);
 
     const targetMembership = await tx.workspaceMember.findUnique({
       where: {
@@ -307,6 +322,20 @@ export const updateWorkspaceMemberRoles = async (
     if (!targetMembership) {
       throw new ApiError(404, "Workspace member not found");
     }
+
+    if (
+      targetUserId === ownerUserId &&
+      !input.roles.includes(WorkspaceRole.ADMIN)
+    ) {
+      throw new ApiError(409, "The workspace owner must retain the Admin role.");
+    }
+
+    assertActorCanChangeAdminAuthority(
+      actorUserId,
+      ownerUserId,
+      targetMembership.roles,
+      input.roles
+    );
 
     const removedRoles = targetMembership.roles.filter(
       (role) => !input.roles.includes(role)
@@ -426,6 +455,7 @@ export const deleteWorkspaceMember = async (
   return await prisma.$transaction(async (tx) => {
     await acquireWorkspaceMemberMutationLock(tx, workspaceId);
     await assertCurrentActorIsAdmin(tx, workspaceId, actorUserId);
+    const ownerUserId = await getWorkspaceOwnerId(tx, workspaceId);
 
     const targetMembership = await tx.workspaceMember.findUnique({
       where: {
@@ -439,6 +469,17 @@ export const deleteWorkspaceMember = async (
 
     if (!targetMembership) {
       throw new ApiError(404, "Workspace member not found");
+    }
+
+    if (targetUserId === ownerUserId) {
+      throw new ApiError(409, "The workspace owner cannot be removed.");
+    }
+
+    if (
+      targetMembership.roles.includes(WorkspaceRole.ADMIN) &&
+      actorUserId !== ownerUserId
+    ) {
+      throw new ApiError(403, "Only the workspace owner can remove an Admin.");
     }
 
     if (targetMembership.roles.includes(WorkspaceRole.ADMIN)) {

@@ -100,7 +100,9 @@ export const workspacePaths: OpenApiPathMap = {
       },
     },
     post: {
-      tags: ["Workspaces"], summary: "Create a workspace", security: [{ cookieAuth: [] }],
+      tags: ["Workspaces"], summary: "Create a workspace",
+      description: "Authenticated users may create multiple workspaces. The creator becomes the workspace Owner and an ADMIN member.",
+      security: [{ cookieAuth: [] }],
       requestBody: { required: true, content: { "application/json": { schema: {
         type: "object", additionalProperties: false, required: ["name"],
         properties: { name: { type: "string", minLength: 1, maxLength: 100 } },
@@ -111,7 +113,6 @@ export const workspacePaths: OpenApiPathMap = {
           membership: { $ref: "#/components/schemas/WorkspaceMembership" },
         } }),
         "400": jsonError("Invalid workspace body."), "401": jsonError("Authentication is required."),
-        "409": jsonError("The user already owns a workspace."),
       },
     },
   },
@@ -192,7 +193,7 @@ export const workspacePaths: OpenApiPathMap = {
     patch: {
       tags: ["Workspaces"],
       summary: "Replace a workspace member's roles",
-      description: "ADMIN only. Replaces the member's explicit role array and blocks removal of the last Admin or a role with active assigned work.",
+      description: "ADMIN only. Replaces the member's explicit role array and blocks removal of the last Admin or a role with active assigned work. The Owner must retain ADMIN. Only the Owner may promote a member to ADMIN or demote an ADMIN.",
       security: [{ cookieAuth: [] }],
       parameters: [
         { $ref: "#/components/parameters/WorkspaceId" },
@@ -203,9 +204,9 @@ export const workspacePaths: OpenApiPathMap = {
         "200": jsonSuccess("Workspace member roles updated successfully", { type: "object", required: ["member"], properties: { member: workspaceMemberData } }),
         "400": jsonError("Invalid member parameters or roles body."),
         "401": jsonError("Authentication is required."),
-        "403": jsonError("Explicit ADMIN role is required."),
+        "403": jsonError("Explicit ADMIN role is required. Only the workspace Owner can promote or demote Admins."),
         "404": jsonError("Workspace member not found"),
-        "409": jsonError("Workspace must retain at least one Admin. Reassign active design work before removing the DESIGNER role. Reassign or complete active listing work before removing the LISTER role."),
+        "409": jsonError("The workspace Owner must retain the Admin role. Workspace must retain at least one Admin. Reassign active design work before removing the DESIGNER role. Reassign or complete active listing work before removing the LISTER role."),
       },
     },
   },
@@ -233,7 +234,7 @@ export const workspacePaths: OpenApiPathMap = {
     delete: {
       tags: ["Workspaces"],
       summary: "Remove a workspace member",
-      description: "ADMIN only. Deletes only the WorkspaceMember row; user-owned workflow and audit history remains intact. Blocks removal of the last Admin or a member with active Designer/Lister work.",
+      description: "ADMIN only. Deletes only the WorkspaceMember row; user-owned workflow and audit history remains intact. The workspace Owner cannot be removed. Only the Owner may remove an ADMIN. Removal also blocks removal of the last Admin or a member with active Designer/Lister work.",
       security: [{ cookieAuth: [] }],
       parameters: [
         { $ref: "#/components/parameters/WorkspaceId" },
@@ -243,9 +244,9 @@ export const workspacePaths: OpenApiPathMap = {
         "200": jsonSuccess("Workspace member removed successfully", { type: "object", required: ["userId"], properties: { userId: { type: "string" } } }),
         "400": jsonError("Invalid member parameters."),
         "401": jsonError("Authentication is required."),
-        "403": jsonError("Explicit ADMIN role is required."),
+        "403": jsonError("Explicit ADMIN role is required. Only the workspace Owner can remove an Admin."),
         "404": jsonError("Workspace member not found"),
-        "409": jsonError("Workspace must retain at least one Admin. Reassign active design work before removing the DESIGNER role. Reassign or complete active listing work before removing the LISTER role."),
+        "409": jsonError("The workspace Owner cannot be removed. Workspace must retain at least one Admin. Reassign active design work before removing the DESIGNER role. Reassign or complete active listing work before removing the LISTER role."),
       },
     },
   },

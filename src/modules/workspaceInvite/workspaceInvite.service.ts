@@ -238,18 +238,24 @@ export const createWorkspaceInvite = async (
     workspaceId = workspace.id;
     workspaceName = workspace.name;
   } else {
-    // If no target workspace specified, first check if caller owns a workspace
-    const ownedWorkspace = await prisma.workspace.findUnique({
+    // If no target workspace is specified, resolve a single owned workspace.
+    const ownedWorkspaces = await prisma.workspace.findMany({
       where: { ownerId: callerUserId },
       select: {
         id: true,
         name: true,
       },
+      take: 2,
     });
 
-    if (ownedWorkspace) {
-      workspaceId = ownedWorkspace.id;
-      workspaceName = ownedWorkspace.name;
+    if (ownedWorkspaces.length === 1) {
+      workspaceId = ownedWorkspaces[0].id;
+      workspaceName = ownedWorkspaces[0].name;
+    } else if (ownedWorkspaces.length > 1) {
+      throw new ApiError(
+        400,
+        "You own multiple workspaces. Please specify the target workspace ID in the request route."
+      );
     } else {
       // If caller does not own a workspace, check their admin memberships
       const adminMemberships = await prisma.workspaceMember.findMany({

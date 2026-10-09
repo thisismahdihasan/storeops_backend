@@ -11,7 +11,7 @@ model User {
 
   passwordResetOtps PasswordResetOtp[]
 
-  ownedWorkspace            Workspace?
+  ownedWorkspaces           Workspace[]
   memberships               WorkspaceMember[]
   sentInvites               WorkspaceInvite[]
   researchItemsCreated      ResearchItem[]

@@ -1,7 +1,7 @@
 model Workspace {
   id                            String   @id @default(cuid())
   name                          String
-  ownerId                       String   @unique
+  ownerId                       String
   designerAutoAssignmentEnabled Boolean  @default(true)
   listerAutoAssignmentEnabled   Boolean  @default(true)
   finalAssetAutoCleanupEnabled  Boolean  @default(false)
@@ -14,6 +14,8 @@ model Workspace {
   invites       WorkspaceInvite[]
   researchItems ResearchItem[]
   notifications Notification[]
+
+  @@index([ownerId])
 }
 
 model WorkspaceMember {
@@ -31,4 +33,5 @@ model WorkspaceMember {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId])
+  @@index([userId])
 }
