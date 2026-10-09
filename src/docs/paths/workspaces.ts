@@ -63,6 +63,15 @@ const workspaceMemberRolesBody = {
   },
 };
 
+const transferWorkspaceOwnershipBody = {
+  type: "object",
+  additionalProperties: false,
+  required: ["targetUserId"],
+  properties: {
+    targetUserId: { type: "string", minLength: 1 },
+  },
+};
+
 const workspaceMemberAssignmentAvailabilityBody = {
   type: "object",
   additionalProperties: false,
@@ -186,6 +195,24 @@ export const workspacePaths: OpenApiPathMap = {
         }),
         "401": jsonError("Authentication is required."),
         "403": jsonError("Explicit ADMIN role is required."),
+      },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/transfer-ownership": {
+    post: {
+      tags: ["Workspaces"],
+      summary: "Transfer workspace ownership",
+      description: "Owner-only action. Transfers ownership atomically to an existing workspace member. The new owner is guaranteed ADMIN while retaining existing operational roles. The previous owner remains an ADMIN member.",
+      security: [{ cookieAuth: [] }],
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
+      requestBody: { required: true, content: { "application/json": { schema: transferWorkspaceOwnershipBody } } },
+      responses: {
+        "200": jsonSuccess("Workspace ownership transferred successfully", { type: "object", required: ["workspace"], properties: { workspace: { $ref: "#/components/schemas/Workspace" } } }),
+        "400": jsonError("Invalid workspace ID or ownership transfer body."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("Only the workspace owner can transfer ownership."),
+        "404": jsonError("Workspace or target workspace member not found."),
+        "409": jsonError("Target user is already the workspace owner."),
       },
     },
   },

@@ -6,6 +6,7 @@ import { ACTIVE_DESIGN_STATUSES } from "../research/research.assignment.js";
 import { acquireWorkspaceMemberMutationLock } from "./workspace.member-lock.js";
 import {
   CreateWorkspaceInput,
+  TransferWorkspaceOwnershipInput,
   UpdateWorkspaceMemberAssignmentAvailabilityInput,
   UpdateWorkspaceMemberRolesInput,
 } from "./workspace.validation.js";
@@ -14,6 +15,7 @@ import {
   DeleteWorkspaceMemberResult,
   GetWorkspaceMembersResult,
   GetUserWorkspacesResult,
+  TransferWorkspaceOwnershipResult,
   UpdateWorkspaceMemberAssignmentAvailabilityResult,
   UpdateWorkspaceMemberRolesResult,
 } from "./workspace.type.js";
@@ -504,6 +506,68 @@ export const deleteWorkspaceMember = async (
     });
 
     return { userId: targetUserId };
+  });
+};
+
+// Transfers database-backed workspace ownership to an existing member.
+export const transferWorkspaceOwnership = async (
+  workspaceId: string,
+  actorUserId: string,
+  input: TransferWorkspaceOwnershipInput
+): Promise<TransferWorkspaceOwnershipResult> => {
+  return await prisma.$transaction(async (tx) => {
+    await acquireWorkspaceMemberMutationLock(tx, workspaceId);
+
+    const workspace = await tx.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, ownerId: true },
+    });
+
+    if (!workspace) {
+      throw new ApiError(404, "Workspace not found");
+    }
+
+    if (workspace.ownerId !== actorUserId) {
+      throw new ApiError(403, "Only the workspace owner can transfer ownership.");
+    }
+
+    if (input.targetUserId === workspace.ownerId) {
+      throw new ApiError(409, "Target user is already the workspace owner.");
+    }
+
+    const targetMembership = await tx.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId,
+          userId: input.targetUserId,
+        },
+      },
+      select: { roles: true },
+    });
+
+    if (!targetMembership) {
+      throw new ApiError(404, "Target user is not a member of this workspace.");
+    }
+
+    if (!targetMembership.roles.includes(WorkspaceRole.ADMIN)) {
+      await tx.workspaceMember.update({
+        where: {
+          workspaceId_userId: {
+            workspaceId,
+            userId: input.targetUserId,
+          },
+        },
+        data: { roles: [...targetMembership.roles, WorkspaceRole.ADMIN] },
+      });
+    }
+
+    const updatedWorkspace = await tx.workspace.update({
+      where: { id: workspaceId },
+      data: { ownerId: input.targetUserId },
+      select: safeWorkspaceSelect,
+    });
+
+    return { workspace: updatedWorkspace };
   });
 };
 

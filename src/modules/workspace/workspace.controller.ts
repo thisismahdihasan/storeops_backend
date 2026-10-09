@@ -4,6 +4,7 @@ import { ApiResponse } from "../../shared/ApiResponse.js";
 import * as workspaceService from "./workspace.service.js";
 import {
   createWorkspaceSchema,
+  transferWorkspaceOwnershipSchema,
   updateWorkspaceMemberAssignmentAvailabilitySchema,
   updateWorkspaceMemberRolesSchema,
   workspaceIdParamsSchema,
@@ -121,6 +122,27 @@ export const deleteWorkspaceMember = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Workspace member removed successfully",
+    data: result,
+  });
+};
+
+// Transfers workspace ownership to an existing workspace member.
+export const transferWorkspaceOwnership = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const { workspaceId } = workspaceIdParamsSchema.parse(req.params);
+  const validatedInput = transferWorkspaceOwnershipSchema.parse(req.body);
+  const result = await workspaceService.transferWorkspaceOwnership(
+    workspaceId,
+    authReq.user.id,
+    validatedInput
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Workspace ownership transferred successfully",
     data: result,
   });
 };

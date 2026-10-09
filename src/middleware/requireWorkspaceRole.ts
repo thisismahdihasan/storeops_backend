@@ -62,6 +62,43 @@ export const requireWorkspaceMember = catchAsync(
   }
 );
 
+// Verifies the authenticated user is the current database-backed workspace owner.
+export const requireWorkspaceOwner = catchAsync(
+  async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    const authUser = (req as AuthenticatedRequest).user;
+    if (!authUser?.id) {
+      throw new ApiError(401, "Authentication required");
+    }
+
+    const workspaceId = req.params?.workspaceId;
+    if (
+      !workspaceId ||
+      typeof workspaceId !== "string" ||
+      workspaceId.trim() === ""
+    ) {
+      throw new ApiError(400, "Workspace ID is required");
+    }
+
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId.trim() },
+      select: { id: true, ownerId: true },
+    });
+
+    if (!workspace) {
+      throw new ApiError(404, "Workspace not found");
+    }
+
+    if (workspace.ownerId !== authUser.id) {
+      throw new ApiError(
+        403,
+        "Only the workspace owner can perform this action"
+      );
+    }
+
+    next();
+  }
+);
+
 // Verifies the user has active membership in the target workspace and possesses at least one of the allowed roles.
 export const requireWorkspaceRole = (...allowedRoles: WorkspaceRole[]) => {
   if (allowedRoles.length === 0) {

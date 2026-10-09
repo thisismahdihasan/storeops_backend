@@ -33,6 +33,14 @@ export type UpdateWorkspaceMemberRolesInput = z.infer<
   typeof updateWorkspaceMemberRolesSchema
 >;
 
+export const transferWorkspaceOwnershipSchema = z.object({
+  targetUserId: z.string().trim().min(1, "Target user ID is required"),
+}).strict();
+
+export type TransferWorkspaceOwnershipInput = z.infer<
+  typeof transferWorkspaceOwnershipSchema
+>;
+
 export const assignmentAvailabilityRoleSchema = z.enum([
   WorkspaceRole.DESIGNER,
   WorkspaceRole.LISTER,

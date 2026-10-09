@@ -72,3 +72,7 @@ export type UpdateWorkspaceMemberAssignmentAvailabilityResult = {
 export type DeleteWorkspaceMemberResult = {
   userId: string;
 };
+
+export type TransferWorkspaceOwnershipResult = {
+  workspace: SafeWorkspace;
+};

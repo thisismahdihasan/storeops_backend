@@ -1,13 +1,17 @@
 import { Router } from "express";
 import { WorkspaceRole } from "@prisma/client";
 import { requireAuth } from "../../middleware/requireAuth.js";
-import { requireWorkspaceRole } from "../../middleware/requireWorkspaceRole.js";
+import {
+  requireWorkspaceOwner,
+  requireWorkspaceRole,
+} from "../../middleware/requireWorkspaceRole.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
   createWorkspace,
   deleteWorkspaceMember,
   getWorkspaceMembers,
   getUserWorkspaces,
+  transferWorkspaceOwnership,
   updateWorkspaceMemberAssignmentAvailability,
   updateWorkspaceMemberRoles,
   updateWorkspaceSettings,
@@ -30,6 +34,12 @@ const router: Router = Router();
 
 router.get("/", requireAuth, catchAsync(getUserWorkspaces));
 router.post("/", requireAuth, catchAsync(createWorkspace));
+router.post(
+  "/:workspaceId/transfer-ownership",
+  requireAuth,
+  requireWorkspaceOwner,
+  catchAsync(transferWorkspaceOwnership)
+);
 router.patch(
   "/:workspaceId/settings",
   requireAuth,
