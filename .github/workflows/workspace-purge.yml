@@ -1,0 +1,31 @@
+name: Workspace Purge
+
+on:
+  schedule:
+    - cron: "25 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workspace-purge
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    name: Run Workspace Purge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call workspace purge endpoint
+        env:
+          STOREOPS_API_URL: ${{ secrets.STOREOPS_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          BASE_URL="${STOREOPS_API_URL%/}"
+          curl --fail-with-body --show-error --silent \
+            -X POST "${BASE_URL}/api/v1/system/cleanup/workspaces" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -d '{}'
