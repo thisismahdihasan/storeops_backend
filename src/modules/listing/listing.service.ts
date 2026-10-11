@@ -80,7 +80,7 @@ export const getListerWorkQueue = async (
   listerId: string,
   query: GetListerWorkQueueQueryInput
 ): Promise<ListerWorkQueueResult> => {
-  const { page, limit, status, search } = query;
+  const { page, limit, status, search, sort } = query;
 
   const researchItemWhere: Prisma.ResearchItemWhereInput = {
     workspaceId,
@@ -108,10 +108,10 @@ export const getListerWorkQueue = async (
     prisma.listingAssignment.findMany({
       where,
       select: safeListerWorkQueueSelect,
-      orderBy: [
-        { assignedAt: "desc" },
-        { id: "desc" },
-      ],
+      orderBy:
+        sort === "newest"
+          ? [{ assignedAt: "desc" }, { id: "desc" }]
+          : [{ assignedAt: "asc" }, { id: "asc" }],
       skip,
       take: limit,
     }),
@@ -978,7 +978,7 @@ export const getAdminListingList = async (
   workspaceId: string,
   query: GetAdminListingListQueryInput
 ): Promise<AdminListingListResult> => {
-  const { page, limit, listerId, status, date, search, assignment } = query;
+  const { page, limit, listerId, status, date, search, assignment, sort } = query;
 
   const where: Prisma.ResearchItemWhereInput = {
     workspaceId,
@@ -1074,7 +1074,12 @@ export const getAdminListingList = async (
           },
         },
       },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      orderBy:
+        sort === "newest"
+          ? [{ createdAt: "desc" }, { id: "desc" }]
+          : sort === "oldest"
+            ? [{ createdAt: "asc" }, { id: "asc" }]
+            : [{ updatedAt: "desc" }, { id: "desc" }],
       skip,
       take: limit,
     }),

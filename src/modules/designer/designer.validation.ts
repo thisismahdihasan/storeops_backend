@@ -46,6 +46,7 @@ export const getDesignerWorkQueueQuerySchema = z
       .trim()
       .transform((val) => (val.length > 0 ? val : undefined))
       .optional(),
+    sort: z.enum(["fifo", "newest"]).optional(),
   })
   .strict();
 
@@ -115,6 +116,7 @@ export const getAdminDesignListQuerySchema = z
       .trim()
       .transform((val) => (val.length > 0 ? val : undefined))
       .optional(),
+    sort: z.enum(["updated", "newest", "oldest"]).optional(),
   })
   .strict();
 

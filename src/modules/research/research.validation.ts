@@ -55,6 +55,7 @@ export const getResearchItemsQuerySchema = z.object({
     .transform((val) => (val.length > 0 ? val : undefined))
     .optional(),
   assignment: z.enum(["UNASSIGNED"]).optional(),
+  sort: z.enum(["newest", "oldest", "updated"]).optional(),
   page: z.coerce
     .number()
     .int("page must be an integer")

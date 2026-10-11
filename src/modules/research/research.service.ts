@@ -420,7 +420,7 @@ export const getResearchItems = async (
   userId: string,
   roles: readonly WorkspaceRole[]
 ): Promise<ResearchItemListResult> => {
-  const { page, limit, createdBy, status, date, search, assignment } = query;
+  const { page, limit, createdBy, status, date, search, assignment, sort } = query;
   const isAdmin = roles.includes(WorkspaceRole.ADMIN);
 
   const where: Prisma.ResearchItemWhereInput = {
@@ -466,10 +466,12 @@ export const getResearchItems = async (
     prisma.researchItem.findMany({
       where,
       select: safeResearchItemListSelect,
-      orderBy: [
-        { createdAt: "desc" },
-        { id: "desc" },
-      ],
+      orderBy:
+        sort === "oldest"
+          ? [{ createdAt: "asc" }, { id: "asc" }]
+          : sort === "updated"
+            ? [{ updatedAt: "desc" }, { id: "desc" }]
+            : [{ createdAt: "desc" }, { id: "desc" }],
       skip,
       take: limit,
     }),

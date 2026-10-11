@@ -43,6 +43,7 @@ export const getListerWorkQueueQuerySchema = z
       .max(100, "search cannot exceed 100 characters")
       .transform((val) => (val.length > 0 ? val : undefined))
       .optional(),
+    sort: z.enum(["fifo", "newest"]).optional(),
   })
   .strict();
 
@@ -109,6 +110,7 @@ export const getAdminListingListQuerySchema = z
       .transform((val) => (val.length > 0 ? val : undefined))
       .optional(),
     assignment: z.enum(["UNASSIGNED"]).optional(),
+    sort: z.enum(["updated", "newest", "oldest"]).optional(),
   })
   .strict();
 

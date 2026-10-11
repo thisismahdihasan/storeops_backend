@@ -473,7 +473,7 @@ export const getDesignerWorkQueue = async (
   designerId: string,
   query: GetDesignerWorkQueueQueryInput
 ): Promise<DesignerWorkQueueResult> => {
-  const { page, limit, status, search } = query;
+  const { page, limit, status, search, sort } = query;
 
   const researchItemWhere: Prisma.ResearchItemWhereInput = {
     workspaceId,
@@ -501,10 +501,10 @@ export const getDesignerWorkQueue = async (
     prisma.designAssignment.findMany({
       where,
       select: safeDesignerWorkQueueSelect,
-      orderBy: [
-        { assignedAt: "desc" },
-        { id: "desc" },
-      ],
+      orderBy:
+        sort === "fifo"
+          ? [{ assignedAt: "asc" }, { id: "asc" }]
+          : [{ assignedAt: "desc" }, { id: "desc" }],
       skip,
       take: limit,
     }),
@@ -1565,7 +1565,7 @@ export const getAdminDesignList = async (
   workspaceId: string,
   query: GetAdminDesignListQueryInput
 ): Promise<AdminDesignListResult> => {
-  const { page, limit, designerId, status, date, search } = query;
+  const { page, limit, designerId, status, date, search, sort } = query;
 
   const where: Prisma.ResearchItemWhereInput = {
     workspaceId,
@@ -1651,7 +1651,12 @@ export const getAdminDesignList = async (
           },
         },
       },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      orderBy:
+        sort === "newest"
+          ? [{ createdAt: "desc" }, { id: "desc" }]
+          : sort === "oldest"
+            ? [{ createdAt: "asc" }, { id: "asc" }]
+            : [{ updatedAt: "desc" }, { id: "desc" }],
       skip,
       take: limit,
     }),
