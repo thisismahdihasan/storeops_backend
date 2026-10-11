@@ -1124,6 +1124,8 @@ export const requestReviewCorrection = async (
         );
       }
 
+      const now = new Date();
+
       // 7. Concurrency gate: conditional atomic status transition on ResearchItem
       const updatedItemResult = await tx.researchItem.updateMany({
         where: {
@@ -1133,7 +1135,9 @@ export const requestReviewCorrection = async (
         },
         data: {
           status: ResearchStatus.CORRECTION_NEEDED,
-          updatedAt: new Date(),
+          correctionRequestedAt: now,
+          reviewSubmittedAt: null,
+          updatedAt: now,
         },
       });
 
@@ -1327,6 +1331,7 @@ export const approveReviewSubmission = async (
         },
         data: {
           status: ResearchStatus.DESIGN_APPROVED,
+          reviewSubmittedAt: null,
           updatedAt: now,
         },
       });

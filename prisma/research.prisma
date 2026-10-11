@@ -9,6 +9,10 @@ model ResearchItem {
   referenceImagePublicId String?
   createdById            String
   status            ResearchStatus @default(RESEARCHED)
+  correctionRequestedAt DateTime?
+  reviewSubmittedAt     DateTime?
+  issueReportedAt       DateTime?
+  readyForListingAt     DateTime?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 

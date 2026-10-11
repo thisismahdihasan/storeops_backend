@@ -722,6 +722,7 @@ export const reportAssignedDesignIssue = async (
       },
       data: {
         status: ResearchStatus.ISSUE_REPORTED,
+        issueReportedAt: now,
         updatedAt: now,
       },
     });
@@ -877,6 +878,8 @@ export const submitAssignedDesignReview = async (
   try {
     return await prisma.$transaction(
       async (tx) => {
+        const now = new Date();
+
         // Step A: Conditional status transition gate
         const updatedItemResult = await tx.researchItem.updateMany({
           where: {
@@ -886,7 +889,9 @@ export const submitAssignedDesignReview = async (
           },
           data: {
             status: ResearchStatus.DESIGN_REVIEW,
-            updatedAt: new Date(),
+            correctionRequestedAt: null,
+            reviewSubmittedAt: now,
+            updatedAt: now,
           },
         });
 
@@ -937,6 +942,7 @@ export const submitAssignedDesignReview = async (
             imageUrl: uploadedImage.secureUrl,
             imagePublicId: uploadedImage.publicId,
             note: normalizedNote,
+            submittedAt: now,
           },
           select: {
             id: true,
@@ -1082,6 +1088,7 @@ export const startCorrection = async (
         },
         data: {
           status: ResearchStatus.DESIGN_IN_PROGRESS,
+          correctionRequestedAt: null,
           updatedAt: now,
         },
       });
@@ -1502,6 +1509,7 @@ export const completeDesignWork = async (
         },
         data: {
           status: ResearchStatus.READY_FOR_LISTING,
+          readyForListingAt: now,
           updatedAt: now,
         },
       });

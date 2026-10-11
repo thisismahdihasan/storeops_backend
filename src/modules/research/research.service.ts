@@ -1093,7 +1093,10 @@ export const reassignResearchDesigner = async (
           id: researchItemId,
           workspaceId,
         },
-        data: { status: ResearchStatus.ASSIGNED },
+        data: {
+          status: ResearchStatus.ASSIGNED,
+          issueReportedAt: null,
+        },
       });
       finalStatus = ResearchStatus.ASSIGNED;
     }
