@@ -46,9 +46,23 @@ export const getDesignerWorkQueueQuerySchema = z
       .trim()
       .transform((val) => (val.length > 0 ? val : undefined))
       .optional(),
-    sort: z.enum(["fifo", "newest"]).optional(),
+    sort: z
+      .enum(["fifo", "newest", "correction_fifo", "correction_newest"])
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((query, context) => {
+    if (
+      (query.sort === "correction_fifo" || query.sort === "correction_newest") &&
+      query.status !== ResearchStatus.CORRECTION_NEEDED
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Correction sort is only valid for CORRECTION_NEEDED status",
+        path: ["sort"],
+      });
+    }
+  });
 
 export type GetDesignerWorkQueueQueryInput = z.infer<
   typeof getDesignerWorkQueueQuerySchema

@@ -502,7 +502,25 @@ export const getDesignerWorkQueue = async (
       where,
       select: safeDesignerWorkQueueSelect,
       orderBy:
-        sort === "fifo"
+        sort === "correction_fifo"
+          ? [
+              {
+                researchItem: {
+                  correctionRequestedAt: { sort: "asc", nulls: "last" },
+                },
+              },
+              { id: "asc" },
+            ]
+          : sort === "correction_newest"
+            ? [
+                {
+                  researchItem: {
+                    correctionRequestedAt: { sort: "desc", nulls: "last" },
+                  },
+                },
+                { id: "desc" },
+              ]
+          : sort === "fifo"
           ? [{ assignedAt: "asc" }, { id: "asc" }]
           : [{ assignedAt: "desc" }, { id: "desc" }],
       skip,

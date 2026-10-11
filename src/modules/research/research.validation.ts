@@ -81,6 +81,9 @@ export const getIssueItemsQuerySchema = getResearchItemsQuerySchema
     page: true,
     search: true,
   })
+  .extend({
+    sort: z.enum(["fifo", "newest"]).optional(),
+  })
   .strict();
 
 export type GetIssueItemsQueryInput = z.infer<typeof getIssueItemsQuerySchema>;

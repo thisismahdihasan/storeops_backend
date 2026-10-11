@@ -13,6 +13,7 @@ export const getReviewQueueQuerySchema = z
       .positive("limit must be a positive integer")
       .max(100, "limit cannot exceed 100")
       .default(20),
+    sort: z.enum(["fifo", "newest"]).optional(),
   })
   .strict();
 

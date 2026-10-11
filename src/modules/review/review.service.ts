@@ -117,7 +117,16 @@ export const getReviewQueue = async (
           },
         },
       },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      orderBy:
+        query.sort === "newest"
+          ? [
+              { reviewSubmittedAt: { sort: "desc", nulls: "last" } },
+              { id: "desc" },
+            ]
+          : [
+              { reviewSubmittedAt: { sort: "asc", nulls: "last" } },
+              { id: "asc" },
+            ],
       skip,
       take: query.limit,
     }),

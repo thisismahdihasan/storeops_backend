@@ -110,7 +110,9 @@ export const getAdminListingListQuerySchema = z
       .transform((val) => (val.length > 0 ? val : undefined))
       .optional(),
     assignment: z.enum(["UNASSIGNED"]).optional(),
-    sort: z.enum(["updated", "newest", "oldest"]).optional(),
+    sort: z
+      .enum(["updated", "newest", "oldest", "ready_oldest", "ready_newest"])
+      .optional(),
   })
   .strict();
 

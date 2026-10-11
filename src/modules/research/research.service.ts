@@ -10,6 +10,7 @@ import {
 import {
   CreateResearchItemInput,
   BulkAssignResearchBodyInput,
+  GetIssueItemsQueryInput,
   GetResearchItemsQueryInput,
   PreviewResearchItemInput,
   UpdateResearchItemBodyInput,
@@ -414,13 +415,17 @@ const assertCurrentListingAssignmentOwnership = async (
 };
 
 // Returns a paginated list of workspace research items matching creator, status, date, or search filters.
+type GetResearchItemsServiceQuery = GetResearchItemsQueryInput & {
+  stageSort?: "issue_fifo" | "issue_newest";
+};
+
 export const getResearchItems = async (
   workspaceId: string,
-  query: GetResearchItemsQueryInput,
+  query: GetResearchItemsServiceQuery,
   userId: string,
   roles: readonly WorkspaceRole[]
 ): Promise<ResearchItemListResult> => {
-  const { page, limit, createdBy, status, date, search, assignment, sort } = query;
+  const { page, limit, createdBy, status, date, search, assignment, sort, stageSort } = query;
   const isAdmin = roles.includes(WorkspaceRole.ADMIN);
 
   const where: Prisma.ResearchItemWhereInput = {
@@ -467,7 +472,17 @@ export const getResearchItems = async (
       where,
       select: safeResearchItemListSelect,
       orderBy:
-        sort === "oldest"
+        stageSort === "issue_fifo"
+          ? [
+              { issueReportedAt: { sort: "asc", nulls: "last" } },
+              { id: "asc" },
+            ]
+          : stageSort === "issue_newest"
+            ? [
+                { issueReportedAt: { sort: "desc", nulls: "last" } },
+                { id: "desc" },
+              ]
+          : sort === "oldest"
           ? [{ createdAt: "asc" }, { id: "asc" }]
           : sort === "updated"
             ? [{ updatedAt: "desc" }, { id: "desc" }]
@@ -536,6 +551,27 @@ export const getResearchItems = async (
     },
   };
 };
+
+// Retrieves the ADMIN issue queue with stage-specific ordering while preserving
+// the generic research list's public sort contract.
+export const getIssueItems = async (
+  workspaceId: string,
+  query: GetIssueItemsQueryInput,
+  userId: string,
+  roles: readonly WorkspaceRole[]
+): Promise<ResearchItemListResult> =>
+  getResearchItems(
+    workspaceId,
+    {
+      limit: query.limit,
+      page: query.page,
+      search: query.search,
+      status: ResearchStatus.ISSUE_REPORTED,
+      stageSort: query.sort === "newest" ? "issue_newest" : "issue_fifo",
+    },
+    userId,
+    roles
+  );
 
 // Atomically assigns selected, currently unassigned RESEARCHED items to an explicit
 // Designer or distributes them among eligible Designers with deterministic balancing.

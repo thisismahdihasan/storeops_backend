@@ -334,7 +334,7 @@ export const backfillUnassignedListings = async (
           id: true,
         },
         orderBy: [
-          { createdAt: "asc" },
+          { readyForListingAt: { sort: "asc", nulls: "last" } },
           { id: "asc" },
         ],
       });
@@ -1075,7 +1075,17 @@ export const getAdminListingList = async (
         },
       },
       orderBy:
-        sort === "newest"
+        sort === "ready_oldest"
+          ? [
+              { readyForListingAt: { sort: "asc", nulls: "last" } },
+              { id: "asc" },
+            ]
+          : sort === "ready_newest"
+            ? [
+                { readyForListingAt: { sort: "desc", nulls: "last" } },
+                { id: "desc" },
+              ]
+          : sort === "newest"
           ? [{ createdAt: "desc" }, { id: "desc" }]
           : sort === "oldest"
             ? [{ createdAt: "asc" }, { id: "asc" }]

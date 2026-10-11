@@ -103,12 +103,9 @@ export const getIssueItems = async (
     : rawWorkspaceId;
   const validatedQuery = getIssueItemsQuerySchema.parse(req.query);
 
-  const result = await researchService.getResearchItems(
+  const result = await researchService.getIssueItems(
     workspaceId,
-    {
-      ...validatedQuery,
-      status: ResearchStatus.ISSUE_REPORTED,
-    },
+    validatedQuery,
     authReq.user.id,
     authReq.workspaceMembership.roles
   );
