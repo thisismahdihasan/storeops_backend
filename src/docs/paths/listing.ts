@@ -134,6 +134,22 @@ export const listingPaths: OpenApiPathMap = {
       responses: { "200": jsonSuccess("Lister work queue retrieved successfully.", { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { type: "object", required: ["assignmentId", "researchItem", "preview", "finalAssetId"], properties: { assignmentId: { type: "string" }, researchItem: { $ref: "#/components/schemas/ListerQueueResearchItem" }, preview: { $ref: "#/components/schemas/ListerQueueApprovedPreview" }, finalAssetId: { type: "string", nullable: true } } } }, pagination: { $ref: "#/components/schemas/Pagination" } } }), "400": jsonError("Invalid queue query."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit LISTER role is required.") },
     },
   },
+  "/api/v1/workspaces/{workspaceId}/lister/history": {
+    get: {
+      tags: ["Listing"], summary: "Get the current Lister's completed history", security: [{ cookieAuth: [] }],
+      description: "Explicit LISTER role required. Returns only assignments completed by the authenticated user in this workspace.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/Limit" }, { name: "search", in: "query", schema: { type: "string", maxLength: 100 } }, { name: "sort", in: "query", schema: { type: "string", enum: ["newest", "oldest"], default: "newest" } }, { name: "dateFrom", in: "query", schema: { type: "string", format: "date-time" } }, { name: "dateTo", in: "query", schema: { type: "string", format: "date-time" } }],
+      responses: { "200": jsonSuccess("Lister history retrieved successfully.", { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { type: "object", required: ["id", "assignedAt", "startedAt", "completedAt", "researchItem"], properties: { id: { type: "string" }, assignedAt: { type: "string", format: "date-time" }, startedAt: { type: "string", format: "date-time", nullable: true }, completedAt: { type: "string", format: "date-time" }, researchItem: { type: "object", required: ["id", "etsyListingId", "title", "status", "listingResult"], properties: { id: { type: "string" }, etsyListingId: { type: "string" }, title: { type: "string", nullable: true }, status: { $ref: "#/components/schemas/ResearchStatus" }, listingResult: { type: "object", nullable: true, required: ["etsyListingUrl", "listedAt"], properties: { etsyListingUrl: { type: "string", format: "uri", nullable: true }, listedAt: { type: "string", format: "date-time" } } } } } } } }, pagination: { $ref: "#/components/schemas/Pagination" } } }), "400": jsonError("Invalid history query."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit LISTER role is required.") },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/lister/summary": {
+    get: {
+      tags: ["Listing"], summary: "Get the current Lister's activity summary", security: [{ cookieAuth: [] }],
+      description: "Explicit LISTER role required. Active is a current queue snapshot; only completed.filtered uses the optional completedAt range.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { name: "dateFrom", in: "query", schema: { type: "string", format: "date-time" } }, { name: "dateTo", in: "query", schema: { type: "string", format: "date-time" } }],
+      responses: { "200": jsonSuccess("Lister activity summary retrieved successfully.", { type: "object", required: ["active", "completed"], properties: { active: { type: "object", required: ["total", "assigned", "inProgress"], properties: { total: { type: "integer" }, assigned: { type: "integer" }, inProgress: { type: "integer" } } }, completed: { type: "object", required: ["filtered", "allTime"], properties: { filtered: { type: "integer" }, allTime: { type: "integer" } } } } }), "400": jsonError("Invalid summary query."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit LISTER role is required.") },
+    },
+  },
   "/api/v1/workspaces/{workspaceId}/listing/{researchItemId}": {
     get: {
       tags: ["Listing"],

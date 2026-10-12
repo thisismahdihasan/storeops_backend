@@ -19,6 +19,7 @@ import {
   getReferenceImageQuerySchema,
   getResearchItemParamsSchema,
   getResearchItemsQuerySchema,
+  getResearchSummaryQuerySchema,
   previewResearchItemSchema,
   reassignDesignerBodySchema,
   updateResearchItemBodySchema,
@@ -85,6 +86,29 @@ export const getResearchItems = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Research items retrieved successfully",
+    data: result,
+  });
+};
+
+export const getResearchSummary = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const rawWorkspaceId = req.params.workspaceId;
+  const workspaceId = Array.isArray(rawWorkspaceId)
+    ? rawWorkspaceId[0]
+    : rawWorkspaceId;
+  const query = getResearchSummaryQuerySchema.parse(req.query);
+  const result = await researchService.getResearchSummary(
+    workspaceId,
+    authReq.user.id,
+    query
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Research activity summary retrieved successfully",
     data: result,
   });
 };

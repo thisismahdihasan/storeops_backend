@@ -6,6 +6,8 @@ import { catchAsync } from "../../utils/catchAsync.js";
 import {
   getAdminDesignList,
   getDesignerWorkQueue,
+  getDesignerHistory,
+  getDesignerSummary,
   getDesignDetail,
   reportDesignIssue,
   startCorrection,
@@ -25,6 +27,20 @@ designerRouter.get(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.DESIGNER),
   catchAsync(getDesignerWorkQueue)
+);
+
+designerRouter.get(
+  "/history",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(getDesignerHistory)
+);
+
+designerRouter.get(
+  "/summary",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.DESIGNER),
+  catchAsync(getDesignerSummary)
 );
 
 const designRouter: Router = Router({ mergeParams: true });

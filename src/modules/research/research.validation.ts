@@ -1,6 +1,21 @@
 import { z } from "zod";
 import { ResearchStatus } from "@prisma/client";
 import { extractEtsyListing } from "./research.helper.js";
+import {
+  isoDateTimeSchema,
+  validateDateRange,
+} from "../role-activity/roleActivity.validation.js";
+
+export const RESEARCH_STATUS_GROUPS = [
+  "all",
+  "waiting",
+  "in_design",
+  "needs_attention",
+  "in_listing",
+  "listed",
+] as const;
+
+export type ResearchStatusGroup = (typeof RESEARCH_STATUS_GROUPS)[number];
 
 export const createResearchItemSchema = z
   .object({
@@ -33,6 +48,7 @@ export type CreateResearchItemInput = z.infer<typeof createResearchItemSchema>;
 export const getResearchItemsQuerySchema = z.object({
   createdBy: z.string().trim().min(1, "createdBy cannot be empty").optional(),
   status: z.nativeEnum(ResearchStatus, { message: "Invalid status" }).optional(),
+  statusGroup: z.enum(RESEARCH_STATUS_GROUPS).optional(),
   date: z
     .string()
     .trim()
@@ -49,6 +65,8 @@ export const getResearchItemsQuerySchema = z.object({
       );
     }, "Invalid calendar date")
     .optional(),
+  dateFrom: isoDateTimeSchema.optional(),
+  dateTo: isoDateTimeSchema.optional(),
   search: z
     .string()
     .trim()
@@ -67,19 +85,60 @@ export const getResearchItemsQuerySchema = z.object({
     .positive("limit must be a positive integer")
     .max(100, "limit cannot exceed 100")
     .default(20),
+}).superRefine((query, context) => {
+  validateDateRange(query, context);
+  if (query.status && query.statusGroup && query.statusGroup !== "all") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "status and statusGroup cannot be used together",
+      path: ["statusGroup"],
+    });
+  }
+  if (query.date && (query.dateFrom || query.dateTo)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "date cannot be combined with dateFrom or dateTo",
+      path: ["date"],
+    });
+  }
 });
 
 export type GetResearchItemsQueryInput = z.infer<
   typeof getResearchItemsQuerySchema
 >;
 
+export const getResearchSummaryQuerySchema = z
+  .object({
+    dateFrom: isoDateTimeSchema.optional(),
+    dateTo: isoDateTimeSchema.optional(),
+  })
+  .strict()
+  .superRefine(validateDateRange);
+
+export type GetResearchSummaryQueryInput = z.infer<
+  typeof getResearchSummaryQuerySchema
+>;
+
 // Narrows the admin issue queue to the list controls it supports. The status is
 // intentionally not client-controlled; the controller always forces ISSUE_REPORTED.
-export const getIssueItemsQuerySchema = getResearchItemsQuerySchema
-  .pick({
-    limit: true,
-    page: true,
-    search: true,
+export const getIssueItemsQuerySchema = z
+  .object({
+    page: z.coerce
+      .number()
+      .int("page must be an integer")
+      .positive("page must be a positive integer")
+      .default(1),
+    limit: z.coerce
+      .number()
+      .int("limit must be an integer")
+      .positive("limit must be a positive integer")
+      .max(100, "limit cannot exceed 100")
+      .default(20),
+    search: z
+      .string()
+      .trim()
+      .transform((val) => (val.length > 0 ? val : undefined))
+      .optional(),
   })
   .extend({
     sort: z.enum(["fifo", "newest"]).optional(),

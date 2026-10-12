@@ -12,6 +12,8 @@ import {
   getAdminListingList,
   getListerListingDetail,
   getListerWorkQueue,
+  getListerHistory,
+  getListerSummary,
   startListing,
 } from "./listing.controller.js";
 
@@ -31,6 +33,20 @@ listingRouter.get(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(getAdminListingList)
+);
+
+listerRouter.get(
+  "/history",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.LISTER),
+  catchAsync(getListerHistory)
+);
+
+listerRouter.get(
+  "/summary",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.LISTER),
+  catchAsync(getListerSummary)
 );
 
 listingRouter.patch(

@@ -1,5 +1,33 @@
 import { z } from "zod";
 import { ResearchStatus } from "@prisma/client";
+import {
+  isoDateTimeSchema,
+  validateDateRange,
+} from "../role-activity/roleActivity.validation.js";
+
+export const getListerHistoryQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+    search: z.string().trim().max(100).transform((value) => value || undefined).optional(),
+    sort: z.enum(["newest", "oldest"]).default("newest"),
+    dateFrom: isoDateTimeSchema.optional(),
+    dateTo: isoDateTimeSchema.optional(),
+  })
+  .strict()
+  .superRefine(validateDateRange);
+
+export type GetListerHistoryQueryInput = z.infer<typeof getListerHistoryQuerySchema>;
+
+export const getListerSummaryQuerySchema = z
+  .object({
+    dateFrom: isoDateTimeSchema.optional(),
+    dateTo: isoDateTimeSchema.optional(),
+  })
+  .strict()
+  .superRefine(validateDateRange);
+
+export type GetListerSummaryQueryInput = z.infer<typeof getListerSummaryQuerySchema>;
 
 export const LISTER_QUEUE_ACTIVE_STATUSES = [
   ResearchStatus.READY_FOR_LISTING,

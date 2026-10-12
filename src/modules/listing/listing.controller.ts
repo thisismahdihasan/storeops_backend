@@ -9,6 +9,8 @@ import {
   bulkAssignListingBodySchema,
   getAdminListingListQuerySchema,
   getListerWorkQueueQuerySchema,
+  getListerHistoryQuerySchema,
+  getListerSummaryQuerySchema,
   getListerListingDetailParamsSchema,
   startListingBodySchema,
   startListingParamsSchema,
@@ -159,6 +161,32 @@ export const createDownloadFinalAssetHandler = (
     res.setHeader("Expires", "0");
     res.redirect(302, download.downloadUrl);
   };
+};
+
+export const getListerHistory = async (req: Request, res: Response): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const workspaceId = Array.isArray(req.params.workspaceId)
+    ? req.params.workspaceId[0]
+    : req.params.workspaceId;
+  const result = await listingService.getListerHistory(
+    workspaceId,
+    authReq.user.id,
+    getListerHistoryQuerySchema.parse(req.query)
+  );
+  ApiResponse.success(res, { statusCode: 200, message: "Lister history retrieved successfully", data: result });
+};
+
+export const getListerSummary = async (req: Request, res: Response): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const workspaceId = Array.isArray(req.params.workspaceId)
+    ? req.params.workspaceId[0]
+    : req.params.workspaceId;
+  const result = await listingService.getListerSummary(
+    workspaceId,
+    authReq.user.id,
+    getListerSummaryQuerySchema.parse(req.query)
+  );
+  ApiResponse.success(res, { statusCode: 200, message: "Lister activity summary retrieved successfully", data: result });
 };
 
 // Redirects an authorized final asset download to a short-lived private R2 URL.

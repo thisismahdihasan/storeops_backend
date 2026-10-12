@@ -12,9 +12,11 @@ import {
   BulkAssignResearchBodyInput,
   GetIssueItemsQueryInput,
   GetResearchItemsQueryInput,
+  GetResearchSummaryQueryInput,
   PreviewResearchItemInput,
   UpdateResearchItemBodyInput,
 } from "./research.validation.js";
+import { buildDateRangeFilter } from "../role-activity/roleActivity.helper.js";
 import {
   DuplicateResearchItemData,
   EtsyMetadata,
@@ -419,13 +421,29 @@ type GetResearchItemsServiceQuery = GetResearchItemsQueryInput & {
   stageSort?: "issue_fifo" | "issue_newest";
 };
 
+const researchStatusGroups: Record<string, ResearchStatus[]> = {
+  waiting: [ResearchStatus.RESEARCHED],
+  in_design: [
+    ResearchStatus.ASSIGNED,
+    ResearchStatus.DESIGN_IN_PROGRESS,
+    ResearchStatus.DESIGN_REVIEW,
+    ResearchStatus.DESIGN_APPROVED,
+  ],
+  needs_attention: [
+    ResearchStatus.CORRECTION_NEEDED,
+    ResearchStatus.ISSUE_REPORTED,
+  ],
+  in_listing: [ResearchStatus.READY_FOR_LISTING, ResearchStatus.LISTING_IN_PROGRESS],
+  listed: [ResearchStatus.LISTED],
+};
+
 export const getResearchItems = async (
   workspaceId: string,
   query: GetResearchItemsServiceQuery,
   userId: string,
   roles: readonly WorkspaceRole[]
 ): Promise<ResearchItemListResult> => {
-  const { page, limit, createdBy, status, date, search, assignment, sort, stageSort } = query;
+  const { page, limit, createdBy, status, statusGroup, date, dateFrom, dateTo, search, assignment, sort, stageSort } = query;
   const isAdmin = roles.includes(WorkspaceRole.ADMIN);
 
   const where: Prisma.ResearchItemWhereInput = {
@@ -439,6 +457,8 @@ export const getResearchItems = async (
 
   if (status) {
     where.status = status;
+  } else if (statusGroup && statusGroup !== "all") {
+    where.status = { in: researchStatusGroups[statusGroup] };
   }
 
   if (assignment === "UNASSIGNED") {
@@ -454,6 +474,11 @@ export const getResearchItems = async (
       gte: startOfDay,
       lt: nextDay,
     };
+  }
+
+  const createdAtRange = buildDateRangeFilter(dateFrom, dateTo);
+  if (createdAtRange) {
+    where.createdAt = createdAtRange;
   }
 
   if (search) {
@@ -549,6 +574,45 @@ export const getResearchItems = async (
       total,
       totalPages,
     },
+  };
+};
+
+export const getResearchSummary = async (
+  workspaceId: string,
+  userId: string,
+  query: GetResearchSummaryQueryInput
+) => {
+  const baseWhere: Prisma.ResearchItemWhereInput = {
+    workspaceId,
+    createdById: userId,
+  };
+  const createdAtRange = buildDateRangeFilter(query.dateFrom, query.dateTo);
+  if (createdAtRange) {
+    baseWhere.createdAt = createdAtRange;
+  }
+
+  const countFor = (statuses?: ResearchStatus[]) =>
+    prisma.researchItem.count({
+      where: statuses ? { ...baseWhere, status: { in: statuses } } : baseWhere,
+    });
+
+  const [totalResearched, waiting, inDesign, needsAttention, inListing, listed] =
+    await Promise.all([
+      countFor(),
+      countFor(researchStatusGroups.waiting),
+      countFor(researchStatusGroups.in_design),
+      countFor(researchStatusGroups.needs_attention),
+      countFor(researchStatusGroups.in_listing),
+      countFor(researchStatusGroups.listed),
+    ]);
+
+  return {
+    totalResearched,
+    waiting,
+    inDesign,
+    needsAttention,
+    inListing,
+    listed,
   };
 };
 

@@ -14,6 +14,8 @@ import {
   completeFinalAssetMultipartUploadBodySchema,
   getAdminDesignListQuerySchema,
   getDesignerWorkQueueQuerySchema,
+  getDesignerHistoryQuerySchema,
+  getDesignerSummaryQuerySchema,
   getDesignDetailParamsSchema,
   initFinalAssetMultipartUploadBodySchema,
   multipartFinalAssetParamsSchema,
@@ -73,6 +75,32 @@ export const getDesignerWorkQueue = async (
     message: "Designer work queue retrieved successfully",
     data: result,
   });
+};
+
+export const getDesignerHistory = async (req: Request, res: Response): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const workspaceId = Array.isArray(req.params.workspaceId)
+    ? req.params.workspaceId[0]
+    : req.params.workspaceId;
+  const result = await designerService.getDesignerHistory(
+    workspaceId,
+    authReq.user.id,
+    getDesignerHistoryQuerySchema.parse(req.query)
+  );
+  ApiResponse.success(res, { statusCode: 200, message: "Designer history retrieved successfully", data: result });
+};
+
+export const getDesignerSummary = async (req: Request, res: Response): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const workspaceId = Array.isArray(req.params.workspaceId)
+    ? req.params.workspaceId[0]
+    : req.params.workspaceId;
+  const result = await designerService.getDesignerSummary(
+    workspaceId,
+    authReq.user.id,
+    getDesignerSummaryQuerySchema.parse(req.query)
+  );
+  ApiResponse.success(res, { statusCode: 200, message: "Designer activity summary retrieved successfully", data: result });
 };
 
 // Handles HTTP request for starting research/design work on an assigned item.

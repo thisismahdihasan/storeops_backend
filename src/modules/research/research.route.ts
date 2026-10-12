@@ -10,6 +10,7 @@ import {
   getIssueItems,
   getResearchItemById,
   getResearchItems,
+  getResearchSummary,
   getResearchReferenceImage,
   previewResearchItem,
   reassignResearchDesigner,
@@ -59,6 +60,14 @@ router.patch(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(reassignResearchDesigner)
+);
+
+// Registered before /:researchItemId so "my-summary" is never interpreted as an item ID.
+router.get(
+  "/my-summary",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.RESEARCHER),
+  catchAsync(getResearchSummary)
 );
 
 router.post(

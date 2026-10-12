@@ -305,8 +305,11 @@ export const researchPaths: OpenApiPathMap = {
         { $ref: "#/components/parameters/WorkspaceId" },
         { name: "createdBy", in: "query", schema: { type: "string", minLength: 1 } },
         { name: "status", in: "query", schema: { $ref: "#/components/schemas/ResearchStatus" } },
+        { name: "statusGroup", in: "query", schema: { type: "string", enum: ["all", "waiting", "in_design", "needs_attention", "in_listing", "listed"] }, description: "Server-side status group. Cannot be combined with status unless all." },
         { name: "assignment", in: "query", schema: { type: "string", enum: ["UNASSIGNED"] }, description: "Virtual filter that enforces RESEARCHED status and no current DesignAssignment." },
         { name: "date", in: "query", schema: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "UTC calendar date, YYYY-MM-DD." } },
+        { name: "dateFrom", in: "query", schema: { type: "string", format: "date-time" }, description: "Explicit inclusive ISO range start; must be supplied with dateTo and cannot be combined with date." },
+        { name: "dateTo", in: "query", schema: { type: "string", format: "date-time" }, description: "Explicit inclusive ISO range end; must be supplied with dateFrom and cannot be combined with date." },
         { name: "search", in: "query", schema: { type: "string" } },
         { $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/Limit" },
       ],
@@ -554,6 +557,14 @@ export const researchPaths: OpenApiPathMap = {
         "401": jsonError("Authentication is required."),
         "403": jsonError("ADMIN role is required."),
       },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/research-items/my-summary": {
+    get: {
+      tags: ["Research"], summary: "Get the current Researcher's activity summary", security: [{ cookieAuth: [] }],
+      description: "Explicit RESEARCHER role required. Always counts only items created by the authenticated user. Counts are current-state groups, not transition history.",
+      parameters: [{ $ref: "#/components/parameters/WorkspaceId" }, { name: "dateFrom", in: "query", schema: { type: "string", format: "date-time" }, required: false }, { name: "dateTo", in: "query", schema: { type: "string", format: "date-time" }, required: false }],
+      responses: { "200": jsonSuccess("Research activity summary retrieved successfully.", { type: "object", required: ["totalResearched", "waiting", "inDesign", "needsAttention", "inListing", "listed"], properties: { totalResearched: { type: "integer" }, waiting: { type: "integer" }, inDesign: { type: "integer" }, needsAttention: { type: "integer" }, inListing: { type: "integer" }, listed: { type: "integer" } } }), "400": jsonError("dateFrom and dateTo must be valid ordered ISO datetimes supplied together."), "401": jsonError("Authentication is required."), "403": jsonError("Explicit RESEARCHER role is required.") },
     },
   },
 };

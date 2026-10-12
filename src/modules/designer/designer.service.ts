@@ -6,6 +6,8 @@ import {
   DESIGNER_QUEUE_ACTIVE_STATUSES,
   GetAdminDesignListQueryInput,
   GetDesignerWorkQueueQueryInput,
+  GetDesignerHistoryQueryInput,
+  GetDesignerSummaryQueryInput,
   MAX_MULTIPART_FINAL_ASSET_FILE_SIZE_BYTES,
   MAX_MULTIPART_FINAL_ASSET_PARTS,
   MULTIPART_FINAL_ASSET_PART_SIZE_BYTES,
@@ -14,6 +16,7 @@ import {
   InitFinalAssetMultipartUploadBodyInput,
   validateMultipartFinalAssetFileName,
 } from "./designer.validation.js";
+import { buildDateRangeFilter } from "../role-activity/roleActivity.helper.js";
 import {
   AdminDesignListItem,
   AdminDesignListResult,
@@ -547,6 +550,98 @@ export const getDesignerWorkQueue = async (
       totalPages,
     },
   };
+};
+
+export const getDesignerHistory = async (
+  workspaceId: string,
+  designerId: string,
+  query: GetDesignerHistoryQueryInput
+) => {
+  const researchItemWhere: Prisma.ResearchItemWhereInput = { workspaceId };
+  if (query.search) {
+    researchItemWhere.OR = [
+      { title: { contains: query.search, mode: "insensitive" } },
+      { etsyListingId: { contains: query.search, mode: "insensitive" } },
+      { normalizedUrl: { contains: query.search, mode: "insensitive" } },
+      { originalUrl: { contains: query.search, mode: "insensitive" } },
+    ];
+  }
+  const completedAtRange = buildDateRangeFilter(query.dateFrom, query.dateTo);
+  const where: Prisma.DesignAssignmentWhereInput = {
+    designerId,
+    completedAt: completedAtRange ?? { not: null },
+    researchItem: researchItemWhere,
+  };
+  if (completedAtRange) where.completedAt = { ...completedAtRange, not: null };
+  const skip = (query.page - 1) * query.limit;
+  const [items, total] = await prisma.$transaction([
+    prisma.designAssignment.findMany({
+      where,
+      select: {
+        id: true,
+        assignedAt: true,
+        startedAt: true,
+        completedAt: true,
+        researchItem: {
+          select: {
+            id: true, etsyListingId: true, title: true, referenceImageUrl: true,
+            status: true, readyForListingAt: true,
+          },
+        },
+      },
+      orderBy: query.sort === "oldest"
+        ? [{ completedAt: "asc" }, { id: "asc" }]
+        : [{ completedAt: "desc" }, { id: "desc" }],
+      skip,
+      take: query.limit,
+    }),
+    prisma.designAssignment.count({ where }),
+  ]);
+  return {
+    items,
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
+    },
+  };
+};
+
+export const getDesignerSummary = async (
+  workspaceId: string,
+  designerId: string,
+  query: GetDesignerSummaryQueryInput
+) => {
+  const activeWhere: Prisma.DesignAssignmentWhereInput = {
+    designerId,
+    isCurrent: true,
+    completedAt: null,
+    researchItem: { workspaceId, status: { in: [...DESIGNER_QUEUE_ACTIVE_STATUSES] } },
+  };
+  const completedBase: Prisma.DesignAssignmentWhereInput = {
+    designerId,
+    completedAt: { not: null },
+    researchItem: { workspaceId },
+  };
+  const completedAtRange = buildDateRangeFilter(query.dateFrom, query.dateTo);
+  const completedFiltered: Prisma.DesignAssignmentWhereInput = completedAtRange
+    ? { ...completedBase, completedAt: { ...completedAtRange, not: null } }
+    : completedBase;
+  const countActive = (status?: ResearchStatus) => prisma.designAssignment.count({
+    where: status
+      ? { ...activeWhere, researchItem: { workspaceId, status } }
+      : activeWhere,
+  });
+  const [total, inProgress, inReview, correctionsNeeded, approved, filtered, allTime] =
+    await Promise.all([
+      countActive(), countActive(ResearchStatus.DESIGN_IN_PROGRESS),
+      countActive(ResearchStatus.DESIGN_REVIEW), countActive(ResearchStatus.CORRECTION_NEEDED),
+      countActive(ResearchStatus.DESIGN_APPROVED),
+      prisma.designAssignment.count({ where: completedFiltered }),
+      prisma.designAssignment.count({ where: completedBase }),
+    ]);
+  return { active: { total, inProgress, inReview, correctionsNeeded, approved }, completed: { filtered, allTime } };
 };
 
 // Atomically transitions an assigned research item to in-progress and sets startedAt on the current assignment.

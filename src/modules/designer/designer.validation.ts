@@ -2,6 +2,38 @@ import path from "node:path";
 import { z } from "zod";
 import { ResearchStatus } from "@prisma/client";
 import { ApiError } from "../../shared/ApiError.js";
+import {
+  isoDateTimeSchema,
+  validateDateRange,
+} from "../role-activity/roleActivity.validation.js";
+
+export const getDesignerHistoryQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+    search: z.string().trim().max(100).transform((value) => value || undefined).optional(),
+    sort: z.enum(["newest", "oldest"]).default("newest"),
+    dateFrom: isoDateTimeSchema.optional(),
+    dateTo: isoDateTimeSchema.optional(),
+  })
+  .strict()
+  .superRefine(validateDateRange);
+
+export type GetDesignerHistoryQueryInput = z.infer<
+  typeof getDesignerHistoryQuerySchema
+>;
+
+export const getDesignerSummaryQuerySchema = z
+  .object({
+    dateFrom: isoDateTimeSchema.optional(),
+    dateTo: isoDateTimeSchema.optional(),
+  })
+  .strict()
+  .superRefine(validateDateRange);
+
+export type GetDesignerSummaryQueryInput = z.infer<
+  typeof getDesignerSummaryQuerySchema
+>;
 
 export const DESIGNER_QUEUE_ACTIVE_STATUSES = [
   ResearchStatus.ASSIGNED,

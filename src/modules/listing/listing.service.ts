@@ -28,8 +28,11 @@ import {
   CompleteListingBodyInput,
   GetAdminListingListQueryInput,
   GetListerWorkQueueQueryInput,
+  GetListerHistoryQueryInput,
+  GetListerSummaryQueryInput,
   LISTER_QUEUE_ACTIVE_STATUSES,
 } from "./listing.validation.js";
+import { buildDateRangeFilter } from "../role-activity/roleActivity.helper.js";
 
 const LISTER_DOWNLOAD_STATUSES = new Set<ResearchStatus>([
   ResearchStatus.READY_FOR_LISTING,
@@ -153,6 +156,97 @@ export const getListerWorkQueue = async (
       totalPages,
     },
   };
+};
+
+export const getListerHistory = async (
+  workspaceId: string,
+  listerId: string,
+  query: GetListerHistoryQueryInput
+) => {
+  const researchItemWhere: Prisma.ResearchItemWhereInput = { workspaceId };
+  if (query.search) {
+    researchItemWhere.OR = [
+      { title: { contains: query.search, mode: "insensitive" } },
+      { etsyListingId: { contains: query.search, mode: "insensitive" } },
+      { normalizedUrl: { contains: query.search, mode: "insensitive" } },
+      { originalUrl: { contains: query.search, mode: "insensitive" } },
+    ];
+  }
+  const completedAtRange = buildDateRangeFilter(query.dateFrom, query.dateTo);
+  const where: Prisma.ListingAssignmentWhereInput = {
+    listerId,
+    completedAt: completedAtRange ?? { not: null },
+    researchItem: researchItemWhere,
+  };
+  if (completedAtRange) where.completedAt = { ...completedAtRange, not: null };
+  const skip = (query.page - 1) * query.limit;
+  const [items, total] = await prisma.$transaction([
+    prisma.listingAssignment.findMany({
+      where,
+      select: {
+        id: true, assignedAt: true, startedAt: true, completedAt: true,
+        researchItem: {
+          select: {
+            id: true, etsyListingId: true, title: true, status: true,
+            listingResult: { select: { etsyListingUrl: true, listedAt: true } },
+          },
+        },
+      },
+      orderBy: query.sort === "oldest"
+        ? [{ completedAt: "asc" }, { id: "asc" }]
+        : [{ completedAt: "desc" }, { id: "desc" }],
+      skip,
+      take: query.limit,
+    }),
+    prisma.listingAssignment.count({ where }),
+  ]);
+  return {
+    items,
+    pagination: {
+      page: query.page, limit: query.limit, total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
+    },
+  };
+};
+
+export const getListerSummary = async (
+  workspaceId: string,
+  listerId: string,
+  query: GetListerSummaryQueryInput
+) => {
+  const activeBase: Prisma.ListingAssignmentWhereInput = {
+    listerId,
+    isCurrent: true,
+    completedAt: null,
+    researchItem: { workspaceId, status: { in: [...LISTER_QUEUE_ACTIVE_STATUSES] } },
+  };
+  const assignedWhere: Prisma.ListingAssignmentWhereInput = {
+    ...activeBase,
+    startedAt: null,
+    researchItem: { workspaceId, status: ResearchStatus.READY_FOR_LISTING },
+  };
+  const inProgressWhere: Prisma.ListingAssignmentWhereInput = {
+    ...activeBase,
+    startedAt: { not: null },
+    researchItem: { workspaceId, status: ResearchStatus.LISTING_IN_PROGRESS },
+  };
+  const completedBase: Prisma.ListingAssignmentWhereInput = {
+    listerId,
+    completedAt: { not: null },
+    researchItem: { workspaceId },
+  };
+  const completedAtRange = buildDateRangeFilter(query.dateFrom, query.dateTo);
+  const completedFiltered: Prisma.ListingAssignmentWhereInput = completedAtRange
+    ? { ...completedBase, completedAt: { ...completedAtRange, not: null } }
+    : completedBase;
+  const [total, assigned, inProgress, filtered, allTime] = await Promise.all([
+    prisma.listingAssignment.count({ where: activeBase }),
+    prisma.listingAssignment.count({ where: assignedWhere }),
+    prisma.listingAssignment.count({ where: inProgressWhere }),
+    prisma.listingAssignment.count({ where: completedFiltered }),
+    prisma.listingAssignment.count({ where: completedBase }),
+  ]);
+  return { active: { total, assigned, inProgress }, completed: { filtered, allTime } };
 };
 
 // Retrieves active listing detail only for the current assigned lister.
