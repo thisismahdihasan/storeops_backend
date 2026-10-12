@@ -645,15 +645,15 @@ export const getDesignerSummary = async (
       ? { ...activeWhere, researchItem: { workspaceId, status } }
       : activeWhere,
   });
-  const [total, inProgress, inReview, correctionsNeeded, approved, filtered, allTime] =
+  const [total, assigned, inProgress, inReview, correctionsNeeded, issueReported, approved, filtered, allTime] =
     await Promise.all([
-      countActive(), countActive(ResearchStatus.DESIGN_IN_PROGRESS),
-      countActive(ResearchStatus.DESIGN_REVIEW), countActive(ResearchStatus.CORRECTION_NEEDED),
+      countActive(), countActive(ResearchStatus.ASSIGNED), countActive(ResearchStatus.DESIGN_IN_PROGRESS),
+      countActive(ResearchStatus.DESIGN_REVIEW), countActive(ResearchStatus.CORRECTION_NEEDED), countActive(ResearchStatus.ISSUE_REPORTED),
       countActive(ResearchStatus.DESIGN_APPROVED),
       prisma.designAssignment.count({ where: completedFiltered }),
       prisma.designAssignment.count({ where: completedBase }),
     ]);
-  return { active: { total, inProgress, inReview, correctionsNeeded, approved }, completed: { filtered, allTime } };
+  return { active: { total, assigned, inProgress, inReview, correctionsNeeded, issueReported, approved }, completed: { filtered, allTime } };
 };
 
 // Atomically transitions an assigned research item to in-progress and sets startedAt on the current assignment.
