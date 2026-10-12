@@ -194,7 +194,7 @@ export const openApiComponents = {
         designerAutoAssignmentEnabled: { type: "boolean" },
         listerAutoAssignmentEnabled: { type: "boolean" },
         finalAssetAutoCleanupEnabled: { type: "boolean" },
-        finalAssetRetentionDays: { type: "integer", minimum: 1, maximum: 365 },
+        finalAssetRetentionDays: { type: "integer", minimum: 0, maximum: 365 },
       },
     },
     Workspace: {
@@ -205,7 +205,7 @@ export const openApiComponents = {
         designerAutoAssignmentEnabled: { type: "boolean" },
         listerAutoAssignmentEnabled: { type: "boolean" },
         finalAssetAutoCleanupEnabled: { type: "boolean" },
-        finalAssetRetentionDays: { type: "integer", minimum: 1, maximum: 365 },
+        finalAssetRetentionDays: { type: "integer", minimum: 0, maximum: 365 },
         deletionScheduledAt: { ...dateTime, nullable: true },
         permanentDeletionAt: { ...dateTime, nullable: true, description: "Derived from deletionScheduledAt plus the fixed 72-hour grace period; not stored." },
         createdAt: dateTime, updatedAt: dateTime,

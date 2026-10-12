@@ -106,7 +106,7 @@ export const updateWorkspaceSettingsSchema = z
     designerAutoAssignmentEnabled: z.boolean().optional(),
     listerAutoAssignmentEnabled: z.boolean().optional(),
     finalAssetAutoCleanupEnabled: z.boolean().optional(),
-    finalAssetRetentionDays: z.number().int().min(1).max(365).optional(),
+    finalAssetRetentionDays: z.number().int().min(0).max(365).optional(),
   })
   .strict()
   .refine(

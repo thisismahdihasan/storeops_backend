@@ -333,7 +333,7 @@ export const workspacePaths: OpenApiPathMap = {
           designerAutoAssignmentEnabled: { type: "boolean" },
           listerAutoAssignmentEnabled: { type: "boolean" },
           finalAssetAutoCleanupEnabled: { type: "boolean" },
-          finalAssetRetentionDays: { type: "integer", minimum: 1, maximum: 365 },
+          finalAssetRetentionDays: { type: "integer", minimum: 0, maximum: 365 },
         }
       } } } },
       responses: {

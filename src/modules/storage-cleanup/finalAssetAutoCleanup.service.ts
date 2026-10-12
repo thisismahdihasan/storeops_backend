@@ -104,11 +104,11 @@ export const runFinalAssetAutoCleanup = async (
         for (const workspace of enabledWorkspaces) {
           const retentionDays = workspace.finalAssetRetentionDays;
 
-          // Safe guard: validate custom retention period (1..365 days)
+          // Safe guard: validate retention period (0 = next cleanup run, 1..365 = elapsed days)
           if (
             typeof retentionDays !== "number" ||
             !Number.isInteger(retentionDays) ||
-            retentionDays < 1 ||
+            retentionDays < 0 ||
             retentionDays > 365
           ) {
             console.warn(
@@ -117,9 +117,12 @@ export const runFinalAssetAutoCleanup = async (
             continue;
           }
 
-          const cutoffDate = new Date(
-            now.getTime() - retentionDays * 24 * 60 * 60 * 1000
-          );
+          const cutoffDate =
+            retentionDays === 0
+              ? now
+              : new Date(
+                  now.getTime() - retentionDays * 24 * 60 * 60 * 1000
+                );
           const failedAssetIds = new Set<string>();
           let workspaceHadEligible = false;
           let batchIteration = 0;
