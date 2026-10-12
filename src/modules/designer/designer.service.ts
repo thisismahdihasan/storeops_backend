@@ -584,8 +584,20 @@ export const getDesignerHistory = async (
         completedAt: true,
         researchItem: {
           select: {
-            id: true, etsyListingId: true, title: true, normalizedUrl: true, referenceImageUrl: true,
-            status: true, readyForListingAt: true,
+            id: true,
+            etsyListingId: true,
+            title: true,
+            normalizedUrl: true,
+            referenceImageUrl: true,
+            status: true,
+            readyForListingAt: true,
+            finalAssets: {
+              orderBy: { uploadedAt: "desc" },
+              take: 1,
+              select: {
+                fileName: true,
+              },
+            },
           },
         },
       },
