@@ -187,7 +187,7 @@ export const getListerHistory = async (
         id: true, assignedAt: true, startedAt: true, completedAt: true,
         researchItem: {
           select: {
-            id: true, etsyListingId: true, title: true, status: true,
+            id: true, etsyListingId: true, title: true, normalizedUrl: true, referenceImageUrl: true, status: true,
             listingResult: { select: { etsyListingUrl: true, listedAt: true } },
           },
         },

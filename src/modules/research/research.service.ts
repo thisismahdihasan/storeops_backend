@@ -427,11 +427,9 @@ const researchStatusGroups: Record<string, ResearchStatus[]> = {
     ResearchStatus.ASSIGNED,
     ResearchStatus.DESIGN_IN_PROGRESS,
     ResearchStatus.DESIGN_REVIEW,
-    ResearchStatus.DESIGN_APPROVED,
-  ],
-  needs_attention: [
     ResearchStatus.CORRECTION_NEEDED,
     ResearchStatus.ISSUE_REPORTED,
+    ResearchStatus.DESIGN_APPROVED,
   ],
   in_listing: [ResearchStatus.READY_FOR_LISTING, ResearchStatus.LISTING_IN_PROGRESS],
   listed: [ResearchStatus.LISTED],
@@ -596,12 +594,11 @@ export const getResearchSummary = async (
       where: statuses ? { ...baseWhere, status: { in: statuses } } : baseWhere,
     });
 
-  const [totalResearched, waiting, inDesign, needsAttention, inListing, listed] =
+  const [totalResearched, waiting, inDesign, inListing, listed] =
     await Promise.all([
       countFor(),
       countFor(researchStatusGroups.waiting),
       countFor(researchStatusGroups.in_design),
-      countFor(researchStatusGroups.needs_attention),
       countFor(researchStatusGroups.in_listing),
       countFor(researchStatusGroups.listed),
     ]);
@@ -610,7 +607,6 @@ export const getResearchSummary = async (
     totalResearched,
     waiting,
     inDesign,
-    needsAttention,
     inListing,
     listed,
   };

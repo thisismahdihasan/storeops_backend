@@ -10,7 +10,6 @@ export const RESEARCH_STATUS_GROUPS = [
   "all",
   "waiting",
   "in_design",
-  "needs_attention",
   "in_listing",
   "listed",
 ] as const;
