@@ -252,10 +252,6 @@ export const getUserWorkspaces = async (
     select: {
       id: true,
       roles: true,
-      designerAssignmentEnabled: true,
-      designerAssignmentPausedUntil: true,
-      listerAssignmentEnabled: true,
-      listerAssignmentPausedUntil: true,
       createdAt: true,
       workspace: {
         select: safeWorkspaceSelect,
@@ -270,10 +266,6 @@ export const getUserWorkspaces = async (
       membership: {
         id: membership.id,
         roles: membership.roles,
-        designerAssignmentEnabled: membership.designerAssignmentEnabled,
-        designerAssignmentPausedUntil: membership.designerAssignmentPausedUntil,
-        listerAssignmentEnabled: membership.listerAssignmentEnabled,
-        listerAssignmentPausedUntil: membership.listerAssignmentPausedUntil,
         createdAt: membership.createdAt,
       },
     })),

@@ -30,10 +30,6 @@ export type CreateWorkspaceResult = {
 export type UserWorkspaceMembership = {
   id: string;
   roles: WorkspaceRole[];
-  designerAssignmentEnabled: boolean;
-  designerAssignmentPausedUntil: Date | null;
-  listerAssignmentEnabled: boolean;
-  listerAssignmentPausedUntil: Date | null;
   createdAt: Date;
 };
 
