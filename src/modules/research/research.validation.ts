@@ -39,7 +39,14 @@ export const createResearchItemSchema = z
           }
         }
       }),
-    reuseReference: z.boolean().optional().default(false),
+    reuseReference: z
+      .preprocess(
+        (value) =>
+          value === "true" ? true : value === "false" ? false : value,
+        z.boolean(),
+      )
+      .optional()
+      .default(false),
     targetProduct: z
       .string()
       .trim()
@@ -161,6 +168,41 @@ export const getResearchItemParamsSchema = z.object({
 
 export type GetResearchItemParamsInput = z.infer<
   typeof getResearchItemParamsSchema
+>;
+
+export const getReferenceUsageHistoryParamsSchema = z
+  .object({
+    workspaceId: z.string().trim().min(1, "workspaceId is required"),
+    etsyListingId: z
+      .string()
+      .trim()
+      .regex(/^\d+$/, "etsyListingId must contain digits only")
+      .max(30, "etsyListingId cannot exceed 30 characters"),
+  })
+  .strict();
+
+export type GetReferenceUsageHistoryParamsInput = z.infer<
+  typeof getReferenceUsageHistoryParamsSchema
+>;
+
+export const getReferenceUsageHistoryQuerySchema = z
+  .object({
+    page: z.coerce
+      .number()
+      .int("page must be an integer")
+      .positive("page must be a positive integer")
+      .default(1),
+    limit: z.coerce
+      .number()
+      .int("limit must be an integer")
+      .positive("limit must be a positive integer")
+      .max(100, "limit cannot exceed 100")
+      .default(20),
+  })
+  .strict();
+
+export type GetReferenceUsageHistoryQueryInput = z.infer<
+  typeof getReferenceUsageHistoryQuerySchema
 >;
 
 export const getReferenceImageQuerySchema = z.object({

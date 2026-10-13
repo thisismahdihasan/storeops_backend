@@ -70,6 +70,7 @@ export type SafeResearchItemListItem = ResearchItemReadItem & {
   currentDesignAssignment: CurrentDesignAssignment | null;
   latestIssueReport: LatestIssueReportSummary | null;
   reviewActivity: ResearchReviewActivity;
+  usageCount: number;
 };
 
 export type PaginationMeta = {
@@ -140,6 +141,22 @@ export type PreviewOccurrence = {
   createdAt: Date;
   status: ResearchStatus;
   targetProduct: string | null;
+};
+
+export type ReferenceUsageHistoryItem = {
+  createdAt: Date;
+  createdBy: {
+    id: string;
+    name: string | null;
+  };
+  id: string;
+  status: ResearchStatus;
+  targetProduct: string | null;
+};
+
+export type ReferenceUsageHistoryResult = {
+  items: ReferenceUsageHistoryItem[];
+  pagination: PaginationMeta;
 };
 
 export type ResearchPreviewResult = {

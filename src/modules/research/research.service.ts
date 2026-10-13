@@ -12,6 +12,7 @@ import {
   BulkAssignResearchBodyInput,
   GetIssueItemsQueryInput,
   GetResearchItemsQueryInput,
+  GetReferenceUsageHistoryQueryInput,
   GetResearchSummaryQueryInput,
   PreviewResearchItemInput,
   UpdateResearchItemBodyInput,
@@ -25,6 +26,7 @@ import {
   ResearchReviewActivity,
   SafeResearchItem,
   ResearchItemDetailResult,
+  ReferenceUsageHistoryResult,
   ResearchPreviewResult,
   ManualReferenceImageUploadResult,
   DeleteResearchItemResult,
@@ -524,6 +526,26 @@ export const getResearchItems = async (
 
   const itemIds = rawItems.map((item) => item.id);
   const reviewActivityMap = await getResearchReviewActivityMap(itemIds);
+  const usageCountByEtsyListingId = new Map<string, number>();
+
+  if (rawItems.length > 0) {
+    const etsyListingIds = [...new Set(rawItems.map((item) => item.etsyListingId))];
+    const usageCounts = await prisma.researchItem.groupBy({
+      by: ["etsyListingId"],
+      where: {
+        workspaceId,
+        etsyListingId: { in: etsyListingIds },
+      },
+      _count: { _all: true },
+    });
+
+    for (const usageCount of usageCounts) {
+      usageCountByEtsyListingId.set(
+        usageCount.etsyListingId,
+        usageCount._count._all,
+      );
+    }
+  }
 
   const items = rawItems.map((item) => {
     const currentAssignment = item.designAssignments[0] ?? null;
@@ -566,6 +588,7 @@ export const getResearchItems = async (
           : null,
         latestReviewId: activity.latestReviewId,
       },
+      usageCount: usageCountByEtsyListingId.get(item.etsyListingId) ?? 1,
     };
   });
 
@@ -576,6 +599,48 @@ export const getResearchItems = async (
       limit,
       total,
       totalPages,
+    },
+  };
+};
+
+export const getReferenceUsageHistory = async (
+  workspaceId: string,
+  etsyListingId: string,
+  query: GetReferenceUsageHistoryQueryInput,
+): Promise<ReferenceUsageHistoryResult> => {
+  const { page, limit } = query;
+  const where = { workspaceId, etsyListingId };
+  const skip = (page - 1) * limit;
+
+  const [items, total] = await prisma.$transaction([
+    prisma.researchItem.findMany({
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        targetProduct: true,
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip,
+      take: limit,
+    }),
+    prisma.researchItem.count({ where }),
+  ]);
+
+  return {
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     },
   };
 };

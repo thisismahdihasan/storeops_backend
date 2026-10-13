@@ -18,6 +18,8 @@ import {
   getIssueItemsQuerySchema,
   getReferenceImageQuerySchema,
   getResearchItemParamsSchema,
+  getReferenceUsageHistoryParamsSchema,
+  getReferenceUsageHistoryQuerySchema,
   getResearchItemsQuerySchema,
   getResearchSummaryQuerySchema,
   previewResearchItemSchema,
@@ -86,6 +88,27 @@ export const getResearchItems = async (
   ApiResponse.success(res, {
     statusCode: 200,
     message: "Research items retrieved successfully",
+    data: result,
+  });
+};
+
+export const getReferenceUsageHistory = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const { workspaceId, etsyListingId } = getReferenceUsageHistoryParamsSchema.parse(
+    req.params,
+  );
+  const query = getReferenceUsageHistoryQuerySchema.parse(req.query);
+  const result = await researchService.getReferenceUsageHistory(
+    workspaceId,
+    etsyListingId,
+    query,
+  );
+
+  ApiResponse.success(res, {
+    statusCode: 200,
+    message: "Reference usage history retrieved successfully",
     data: result,
   });
 };

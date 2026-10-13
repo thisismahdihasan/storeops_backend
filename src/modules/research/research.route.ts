@@ -9,6 +9,7 @@ import {
   deleteResearchItem,
   getIssueItems,
   getResearchItemById,
+  getReferenceUsageHistory,
   getResearchItems,
   getResearchSummary,
   getResearchReferenceImage,
@@ -60,6 +61,13 @@ router.patch(
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN),
   catchAsync(reassignResearchDesigner)
+);
+
+router.get(
+  "/references/:etsyListingId/history",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.ADMIN),
+  catchAsync(getReferenceUsageHistory),
 );
 
 // Registered before /:researchItemId so "my-summary" is never interpreted as an item ID.

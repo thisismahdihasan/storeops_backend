@@ -59,6 +59,13 @@ const researchListItem = {
         },
       },
     },
+    {
+      type: "object",
+      required: ["usageCount"],
+      properties: {
+        usageCount: { type: "integer", minimum: 1 },
+      },
+    },
   ],
 };
 
@@ -351,6 +358,53 @@ export const researchPaths: OpenApiPathMap = {
           },
         }),
         "400": jsonError("Invalid issue list query."),
+        "401": jsonError("Authentication is required."),
+        "403": jsonError("ADMIN role is required."),
+      },
+    },
+  },
+  "/api/v1/workspaces/{workspaceId}/research-items/references/{etsyListingId}/history": {
+    get: {
+      tags: ["Research"],
+      summary: "Get same-reference usage history",
+      security: [{ cookieAuth: [] }],
+      description: "Explicit ADMIN role required. Returns only minimal same-workspace occurrence data for one canonical Etsy listing ID.",
+      parameters: [
+        { $ref: "#/components/parameters/WorkspaceId" },
+        { name: "etsyListingId", in: "path", required: true, schema: { type: "string", pattern: "^\\d+$", maxLength: 30 } },
+        { $ref: "#/components/parameters/Page" },
+        { $ref: "#/components/parameters/Limit" },
+      ],
+      responses: {
+        "200": jsonSuccess("Reference usage history retrieved successfully.", {
+          type: "object",
+          required: ["items", "pagination"],
+          properties: {
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["id", "createdAt", "status", "targetProduct", "createdBy"],
+                properties: {
+                  id: { type: "string" },
+                  createdAt: { type: "string", format: "date-time" },
+                  status: { $ref: "#/components/schemas/ResearchStatus" },
+                  targetProduct: { type: "string", nullable: true, maxLength: 100 },
+                  createdBy: {
+                    type: "object",
+                    required: ["id", "name"],
+                    properties: {
+                      id: { type: "string" },
+                      name: { type: "string", nullable: true },
+                    },
+                  },
+                },
+              },
+            },
+            pagination: { $ref: "#/components/schemas/Pagination" },
+          },
+        }),
+        "400": jsonError("Invalid reference history parameters."),
         "401": jsonError("Authentication is required."),
         "403": jsonError("ADMIN role is required."),
       },
