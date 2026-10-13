@@ -3,6 +3,7 @@ import { requireCronSecret } from "../../middleware/requireCronSecret.js";
 import { catchAsync } from "../../utils/catchAsync.js";
 import {
   cleanupFinalAssets,
+  cleanupNotifications,
   cleanupReviewImages,
   cleanupWorkspaces,
 } from "./system.controller.js";
@@ -19,6 +20,12 @@ router.post(
   "/cleanup/final-assets",
   requireCronSecret,
   catchAsync(cleanupFinalAssets)
+);
+
+router.post(
+  "/cleanup/notifications",
+  requireCronSecret,
+  catchAsync(cleanupNotifications)
 );
 
 router.post(

@@ -15,6 +15,7 @@ model Notification {
 
   @@index([userId, workspaceId, createdAt])
   @@index([userId, workspaceId, isRead])
+  @@index([isRead, createdAt])
   @@index([workspaceId])
   @@index([researchItemId])
 }

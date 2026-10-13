@@ -92,6 +92,45 @@ export const systemPaths: OpenApiPathMap = {
       },
     },
   },
+  "/api/v1/system/cleanup/notifications": {
+    post: {
+      tags: ["Internal"],
+      summary: "Clean up expired notifications",
+      description:
+        "Internal daily cron endpoint. Send the configured `x-cron-secret` header. Read notifications are removed after 10 days and unread notifications after 15 days.",
+      parameters: [
+        {
+          name: "x-cron-secret",
+          in: "header",
+          required: true,
+          schema: { type: "string" },
+          description: "Configured secret; never expose or persist it in clients.",
+        },
+      ],
+      responses: {
+        "200": jsonSuccess("Notification cleanup completed successfully", {
+          type: "object",
+          required: [
+            "deletedCount",
+            "readRetentionDays",
+            "unreadRetentionDays",
+            "readCutoff",
+            "unreadCutoff",
+          ],
+          properties: {
+            deletedCount: { type: "integer" },
+            readRetentionDays: { type: "integer", enum: [10] },
+            unreadRetentionDays: { type: "integer", enum: [15] },
+            readCutoff: { type: "string", format: "date-time" },
+            unreadCutoff: { type: "string", format: "date-time" },
+          },
+        }),
+        "400": jsonError("Invalid cleanup body."),
+        "401": jsonError("Cron secret is invalid or missing."),
+        "500": jsonError("Notification cleanup failed."),
+      },
+    },
+  },
   "/api/v1/system/cleanup/workspaces": {
     post: {
       tags: ["Internal"],

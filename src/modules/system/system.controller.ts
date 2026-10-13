@@ -2,9 +2,11 @@ import { Request, Response } from "express";
 import { cleanupOldReviewImages } from "../review/reviewCleanup.service.js";
 import { runFinalAssetAutoCleanup } from "../storage-cleanup/finalAssetAutoCleanup.service.js";
 import { runWorkspacePurge } from "../workspace/workspacePurge.service.js";
+import { cleanupExpiredNotifications } from "../notification/notificationCleanup.service.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
 import {
   cleanupFinalAssetsBodySchema,
+  cleanupNotificationsBodySchema,
   cleanupReviewsBodySchema,
   cleanupWorkspacesBodySchema,
 } from "./system.validation.js";
@@ -35,6 +37,21 @@ export const cleanupFinalAssets = async (
 
   ApiResponse.success(res, {
     message: "Final asset auto-cleanup completed successfully",
+    data: result,
+  });
+};
+
+// Removes expired transient inbox notifications using fixed state-specific retention windows.
+export const cleanupNotifications = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  cleanupNotificationsBodySchema.parse(req.body);
+
+  const result = await cleanupExpiredNotifications();
+
+  ApiResponse.success(res, {
+    message: "Notification cleanup completed successfully",
     data: result,
   });
 };
