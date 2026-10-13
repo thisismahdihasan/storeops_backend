@@ -289,6 +289,7 @@ export const previewResearchItem = async (
 
   const preview = await researchService.previewResearchItem(
     workspaceId,
+    authReq.user.id,
     validatedInput,
     authReq.workspaceMembership.roles
   );

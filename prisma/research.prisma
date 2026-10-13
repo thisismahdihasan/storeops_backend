@@ -5,6 +5,7 @@ model ResearchItem {
   originalUrl       String
   normalizedUrl     String
   title             String?
+  targetProduct     String?        @db.VarChar(100)
   referenceImageUrl      String?
   referenceImagePublicId String?
   createdById            String
@@ -27,7 +28,7 @@ model ResearchItem {
   listingResult      ListingResult?
   notifications      Notification[]
 
-  @@unique([workspaceId, etsyListingId])
+  @@index([workspaceId, etsyListingId])
   @@index([createdById])
   @@index([status])
   @@index([createdAt])

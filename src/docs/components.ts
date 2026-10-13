@@ -232,13 +232,14 @@ export const openApiComponents = {
       type: "object",
       required: [
         "id", "workspaceId", "etsyListingId", "originalUrl", "normalizedUrl",
-        "title", "referenceImageUrl", "status", "createdAt", "updatedAt",
+        "title", "targetProduct", "referenceImageUrl", "status", "createdAt", "updatedAt",
       ],
       properties: {
         id: stringId, workspaceId: stringId, etsyListingId: { type: "string" },
         originalUrl: { type: "string", format: "uri" },
         normalizedUrl: { type: "string", format: "uri" },
         title: { type: "string", nullable: true },
+        targetProduct: { type: "string", nullable: true, maxLength: 100 },
         referenceImageUrl: { type: "string", format: "uri", nullable: true },
         status: { $ref: "#/components/schemas/ResearchStatus" },
         createdAt: dateTime, updatedAt: dateTime,

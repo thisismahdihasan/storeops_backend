@@ -79,10 +79,10 @@ export const researchPaths: OpenApiPathMap = {
   "/api/v1/workspaces/{workspaceId}/research-items/preview": {
     post: {
       tags: ["Research"],
-      summary: "Preview Etsy listing metadata and duplicate status",
+      summary: "Preview Etsy listing metadata and reference usage",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit RESEARCHER membership required. ADMIN alone may manage Research records but cannot preview or create them. Duplicate detection remains enforced. Callers who also hold ADMIN receive duplicate item metadata for workspace management; other callers receive alreadyExists: true with duplicate: null and omit internal item, creator, status, and timestamp data.",
+        "Explicit RESEARCHER membership required. Returns aggregate same-reference usage and only the caller's latest occurrence; no other researchers' identities or occurrence details are returned. ADMIN callers may view usage details in a later phase.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
       requestBody: {
         required: true,
@@ -113,7 +113,11 @@ export const researchPaths: OpenApiPathMap = {
             "title",
             "referenceImageUrl",
             "alreadyExists",
-            "duplicate",
+            "usageCount",
+            "currentUserUsageCount",
+            "currentUserLatestOccurrence",
+            "canViewUsageDetails",
+            "canAddAgain",
           ],
           properties: {
             etsyListingId: { type: "string" },
@@ -121,22 +125,26 @@ export const researchPaths: OpenApiPathMap = {
             title: { type: "string", nullable: true },
             referenceImageUrl: { type: "string", format: "uri", nullable: true },
             alreadyExists: { type: "boolean" },
-            duplicate: {
+            usageCount: { type: "integer", minimum: 0 },
+            currentUserUsageCount: { type: "integer", minimum: 0 },
+            currentUserLatestOccurrence: {
               type: "object",
               nullable: true,
               required: [
                 "researchItemId",
-                "createdBy",
-                "currentStatus",
                 "createdAt",
+                "status",
+                "targetProduct",
               ],
               properties: {
-                researchItemId: { type: "string", description: "ADMIN responses only." },
-                createdBy: { $ref: "#/components/schemas/CreatedBySummary" },
-                currentStatus: { $ref: "#/components/schemas/ResearchStatus" },
+                researchItemId: { type: "string" },
                 createdAt: { type: "string", format: "date-time" },
+                status: { $ref: "#/components/schemas/ResearchStatus" },
+                targetProduct: { type: "string", nullable: true, maxLength: 100 },
               },
             },
+            canViewUsageDetails: { type: "boolean" },
+            canAddAgain: { type: "boolean" },
           },
         }),
         "400": jsonError("Invalid Etsy listing URL."),
@@ -151,7 +159,7 @@ export const researchPaths: OpenApiPathMap = {
       summary: "Create a research item from an Etsy listing",
       security: [{ cookieAuth: [] }],
       description:
-        "Explicit RESEARCHER membership required. ADMIN alone may manage Research records but cannot create them. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409; callers who also hold ADMIN receive detailed duplicate metadata and other callers receive only alreadyExists: true. A valid reference image (extracted from Etsy or manually uploaded) is strictly required.",
+        "Explicit RESEARCHER membership required. ADMIN alone may manage Research records but cannot create them. New items are assigned to the least-loaded eligible designer when available; otherwise they remain RESEARCHED. A same-workspace duplicate returns 409 unless reuseReference is true. A valid reference image (extracted from Etsy or manually uploaded) is strictly required.",
       parameters: [{ $ref: "#/components/parameters/WorkspaceId" }],
       requestBody: {
         required: true,
@@ -168,6 +176,8 @@ export const researchPaths: OpenApiPathMap = {
                   description:
                     "HTTP(S) Etsy listing URL containing a numeric listing ID.",
                 },
+                reuseReference: { type: "boolean", default: false },
+                targetProduct: { type: "string", nullable: true, maxLength: 100 },
               },
             },
           },
@@ -188,6 +198,8 @@ export const researchPaths: OpenApiPathMap = {
                   description:
                     "Optional manual reference image (JPEG, PNG, WEBP up to 10MB). Used when Etsy image extraction fails or is unavailable.",
                 },
+                reuseReference: { type: "boolean", default: false },
+                targetProduct: { type: "string", nullable: true, maxLength: 100 },
               },
             },
           },
@@ -214,7 +226,7 @@ export const researchPaths: OpenApiPathMap = {
         "401": jsonError("Authentication is required."),
         "403": jsonError("RESEARCHER role is required."),
         "409": {
-          description: "The Etsy listing already exists in this workspace. Callers who also hold ADMIN receive detailed duplicate metadata; other callers receive only alreadyExists: true.",
+          description: "The Etsy listing already exists in this workspace without reuseReference, or the same caller submitted a reused reference within the rapid retry window.",
           content: {
             "application/json": {
               schema: {

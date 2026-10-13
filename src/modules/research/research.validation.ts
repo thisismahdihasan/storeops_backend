@@ -39,6 +39,14 @@ export const createResearchItemSchema = z
           }
         }
       }),
+    reuseReference: z.boolean().optional().default(false),
+    targetProduct: z
+      .string()
+      .trim()
+      .max(100, "Target product cannot exceed 100 characters")
+      .transform((val) => (val.length === 0 ? null : val))
+      .nullable()
+      .optional(),
   })
   .strict();
 
@@ -220,9 +228,26 @@ export type BulkAssignResearchBodyInput = z.infer<
   typeof bulkAssignResearchBodySchema
 >;
 
-export const previewResearchItemSchema = createResearchItemSchema;
+export const previewResearchItemSchema = z
+  .object({
+    etsyUrl: z
+      .string({ message: "etsyUrl is required" })
+      .trim()
+      .min(1, "etsyUrl is required")
+      .superRefine((val, ctx) => {
+        try {
+          extractEtsyListing(val);
+        } catch (err) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: err instanceof Error ? err.message : "Invalid Etsy listing URL",
+          });
+        }
+      }),
+  })
+  .strict();
 
-export type PreviewResearchItemInput = CreateResearchItemInput;
+export type PreviewResearchItemInput = z.infer<typeof previewResearchItemSchema>;
 
 export const updateResearchItemBodySchema = z
   .object({

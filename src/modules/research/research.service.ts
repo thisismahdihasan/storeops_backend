@@ -47,6 +47,7 @@ export const safeResearchItemSelect = {
   originalUrl: true,
   normalizedUrl: true,
   title: true,
+  targetProduct: true,
   referenceImageUrl: true,
   status: true,
   createdById: true,
@@ -90,19 +91,18 @@ export const createResearchItem = async (
   );
 
   // 1. Readable duplicate pre-check within the same workspace BEFORE any upload
-  const existingItem = await prisma.researchItem.findUnique({
-    where: {
-      workspaceId_etsyListingId: {
-        workspaceId,
-        etsyListingId,
-      },
-    },
-    select: duplicateResearchItemSelect,
+  const existingOccurrenceCount = await prisma.researchItem.count({
+    where: { workspaceId, etsyListingId },
   });
 
-  if (existingItem) {
+  if (existingOccurrenceCount > 0 && !input.reuseReference) {
+    const existingItem = await prisma.researchItem.findFirst({
+      where: { workspaceId, etsyListingId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: duplicateResearchItemSelect,
+    });
     const duplicateData: DuplicateResearchItemData = isAdmin
-      ? {
+      && existingItem ? {
           alreadyExists: true,
           researchItemId: existingItem.id,
           createdBy: existingItem.createdBy,
@@ -172,6 +172,42 @@ export const createResearchItem = async (
     const createdItem = await prisma.$transaction(async (tx) => {
       await acquireWorkspaceMemberMutationLock(tx, workspaceId);
 
+      const existingOccurrenceCount = await tx.researchItem.count({
+        where: { workspaceId, etsyListingId },
+      });
+      if (existingOccurrenceCount > 0 && !input.reuseReference) {
+        throw new ApiError(
+          409,
+          "This Etsy listing has already been added to this workspace",
+          true,
+          "",
+          { alreadyExists: true },
+        );
+      }
+
+      if (input.reuseReference) {
+        const windowStart = new Date(Date.now() - 3_000);
+        const recentOwnOccurrence = await tx.researchItem.findFirst({
+          where: {
+            workspaceId,
+            createdById: userId,
+            etsyListingId,
+            createdAt: { gte: windowStart },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: { id: true, createdAt: true },
+        });
+        if (recentOwnOccurrence) {
+          throw new ApiError(
+            409,
+            "A research item for this reference was just created. Please wait a moment before adding again.",
+            true,
+            "",
+            { code: "RAPID_SUBMISSION_GUARD" },
+          );
+        }
+      }
+
       // Check workspace-level auto assignment toggle
       const workspace = await tx.workspace.findUnique({
         where: { id: workspaceId },
@@ -194,6 +230,7 @@ export const createResearchItem = async (
           originalUrl,
           normalizedUrl,
           title: itemTitle,
+          targetProduct: input.targetProduct ?? null,
           referenceImageUrl,
           referenceImagePublicId,
           createdById: userId,
@@ -243,41 +280,6 @@ export const createResearchItem = async (
       }
     }
 
-    // Catch concurrent duplicate creation race condition (P2002)
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      const concurrentItem = await prisma.researchItem.findUnique({
-        where: {
-          workspaceId_etsyListingId: {
-            workspaceId,
-            etsyListingId,
-          },
-        },
-        select: duplicateResearchItemSelect,
-      });
-
-      const duplicateData: DuplicateResearchItemData =
-        isAdmin && concurrentItem
-          ? {
-              alreadyExists: true,
-              researchItemId: concurrentItem.id,
-              createdBy: concurrentItem.createdBy,
-              currentStatus: concurrentItem.status,
-              createdAt: concurrentItem.createdAt,
-            }
-          : { alreadyExists: true };
-
-      throw new ApiError(
-        409,
-        "This Etsy listing has already been added to this workspace",
-        true,
-        "",
-        duplicateData
-      );
-    }
-
     throw error;
   }
 };
@@ -290,6 +292,7 @@ export const safeResearchItemListSelect = Prisma.validator<Prisma.ResearchItemSe
   originalUrl: true,
   normalizedUrl: true,
   title: true,
+  targetProduct: true,
   referenceImageUrl: true,
   status: true,
   createdAt: true,
@@ -350,6 +353,7 @@ const safeResearchItemDetailSelect = {
   originalUrl: true,
   normalizedUrl: true,
   title: true,
+  targetProduct: true,
   referenceImageUrl: true,
   status: true,
   createdAt: true,
@@ -537,6 +541,7 @@ export const getResearchItems = async (
       originalUrl: item.originalUrl,
       normalizedUrl: item.normalizedUrl,
       title: item.title,
+      targetProduct: item.targetProduct,
       referenceImageUrl: item.referenceImageUrl,
       status: item.status,
       createdAt: item.createdAt,
@@ -949,6 +954,7 @@ export const getResearchItemById = async (
     originalUrl: researchItem.originalUrl,
     normalizedUrl: researchItem.normalizedUrl,
     title: researchItem.title,
+    targetProduct: researchItem.targetProduct,
     referenceImageUrl: researchItem.referenceImageUrl,
     status: researchItem.status,
     createdAt: researchItem.createdAt,
@@ -1214,6 +1220,7 @@ export const reassignResearchDesigner = async (
 // Previews Etsy listing metadata and checks same-workspace duplicates without persistent mutations.
 export const previewResearchItem = async (
   workspaceId: string,
+  userId: string,
   input: PreviewResearchItemInput,
   actorRoles: readonly WorkspaceRole[],
   options?: CreateResearchItemOptions
@@ -1221,15 +1228,22 @@ export const previewResearchItem = async (
   const isAdmin = actorRoles.includes(WorkspaceRole.ADMIN);
   const { normalizedUrl, etsyListingId } = extractEtsyListing(input.etsyUrl);
 
-  const existingItem = await prisma.researchItem.findUnique({
-    where: {
-      workspaceId_etsyListingId: {
-        workspaceId,
-        etsyListingId,
-      },
-    },
-    select: duplicateResearchItemSelect,
-  });
+  const usageWhere = { workspaceId, etsyListingId };
+  const [usageCount, currentUserUsageCount, currentUserLatestOccurrence] =
+    await Promise.all([
+      prisma.researchItem.count({ where: usageWhere }),
+      prisma.researchItem.count({ where: { ...usageWhere, createdById: userId } }),
+      prisma.researchItem.findFirst({
+        where: { ...usageWhere, createdById: userId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: {
+          id: true,
+          createdAt: true,
+          status: true,
+          targetProduct: true,
+        },
+      }),
+    ]);
 
   let metadata: EtsyMetadata = { title: null, referenceImageUrl: null };
   try {
@@ -1239,31 +1253,24 @@ export const previewResearchItem = async (
     metadata = { title: null, referenceImageUrl: null };
   }
 
-  if (existingItem) {
-    return {
-      etsyListingId,
-      normalizedUrl,
-      title: metadata.title,
-      referenceImageUrl: metadata.referenceImageUrl,
-      alreadyExists: true,
-      duplicate: isAdmin
-        ? {
-            researchItemId: existingItem.id,
-            createdBy: existingItem.createdBy,
-            currentStatus: existingItem.status,
-            createdAt: existingItem.createdAt,
-          }
-        : null,
-    };
-  }
-
   return {
     etsyListingId,
     normalizedUrl,
     title: metadata.title,
     referenceImageUrl: metadata.referenceImageUrl,
-    alreadyExists: false,
-    duplicate: null,
+    alreadyExists: usageCount > 0,
+    usageCount,
+    currentUserUsageCount,
+    currentUserLatestOccurrence: currentUserLatestOccurrence
+      ? {
+          researchItemId: currentUserLatestOccurrence.id,
+          createdAt: currentUserLatestOccurrence.createdAt,
+          status: currentUserLatestOccurrence.status,
+          targetProduct: currentUserLatestOccurrence.targetProduct,
+        }
+      : null,
+    canViewUsageDetails: isAdmin,
+    canAddAgain: actorRoles.includes(WorkspaceRole.RESEARCHER),
   };
 };
 

@@ -18,6 +18,7 @@ export type SafeResearchItem = {
   originalUrl: string;
   normalizedUrl: string;
   title: string | null;
+  targetProduct: string | null;
   referenceImageUrl: string | null;
   status: ResearchStatus;
   createdById: string;
@@ -50,6 +51,7 @@ export type ResearchItemReadItem = {
   originalUrl: string;
   normalizedUrl: string;
   title: string | null;
+  targetProduct: string | null;
   referenceImageUrl: string | null;
   status: ResearchStatus;
   createdAt: Date;
@@ -133,11 +135,11 @@ export type ReassignedResearchItemData = {
   };
 };
 
-export type PreviewDuplicateInfo = {
+export type PreviewOccurrence = {
   researchItemId: string;
-  createdBy: DuplicateCreatorInfo;
-  currentStatus: ResearchStatus;
   createdAt: Date;
+  status: ResearchStatus;
+  targetProduct: string | null;
 };
 
 export type ResearchPreviewResult = {
@@ -146,7 +148,11 @@ export type ResearchPreviewResult = {
   title: string | null;
   referenceImageUrl: string | null;
   alreadyExists: boolean;
-  duplicate: PreviewDuplicateInfo | null;
+  usageCount: number;
+  currentUserUsageCount: number;
+  currentUserLatestOccurrence: PreviewOccurrence | null;
+  canViewUsageDetails: boolean;
+  canAddAgain: boolean;
 };
 
 export type ManualReferenceImageUploadResult = {
