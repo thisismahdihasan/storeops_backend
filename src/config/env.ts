@@ -50,6 +50,8 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().trim().optional(),
   CLOUDINARY_API_KEY: z.string().trim().optional(),
   CLOUDINARY_API_SECRET: z.string().trim().optional(),
+  ETSY_API_KEYSTRING: z.string().trim().optional(),
+  ETSY_API_SHARED_SECRET: z.string().trim().optional(),
   R2_ACCESS_KEY_ID: z.string().trim().min(1, "R2_ACCESS_KEY_ID is required"),
   R2_SECRET_ACCESS_KEY: z.string().trim().min(1, "R2_SECRET_ACCESS_KEY is required"),
   R2_BUCKET_NAME: z.string().trim().min(1, "R2_BUCKET_NAME is required"),
@@ -63,6 +65,12 @@ const envSchema = z.object({
   const hasCloudName = Boolean(data.CLOUDINARY_CLOUD_NAME && data.CLOUDINARY_CLOUD_NAME.trim().length > 0);
   const hasApiKey = Boolean(data.CLOUDINARY_API_KEY && data.CLOUDINARY_API_KEY.trim().length > 0);
   const hasApiSecret = Boolean(data.CLOUDINARY_API_SECRET && data.CLOUDINARY_API_SECRET.trim().length > 0);
+  const hasEtsyApiKeystring = Boolean(
+    data.ETSY_API_KEYSTRING && data.ETSY_API_KEYSTRING.trim().length > 0,
+  );
+  const hasEtsyApiSharedSecret = Boolean(
+    data.ETSY_API_SHARED_SECRET && data.ETSY_API_SHARED_SECRET.trim().length > 0,
+  );
 
   const anyProvided = hasCloudName || hasApiKey || hasApiSecret;
   const allProvided = hasCloudName && hasApiKey && hasApiSecret;
@@ -128,6 +136,23 @@ const envSchema = z.object({
         code: z.ZodIssueCode.custom,
         message: "R2_ENDPOINT must be a valid URL",
         path: ["R2_ENDPOINT"],
+      });
+    }
+  }
+
+  if (hasEtsyApiKeystring !== hasEtsyApiSharedSecret) {
+    if (!hasEtsyApiKeystring) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "ETSY_API_KEYSTRING is required when ETSY_API_SHARED_SECRET is provided",
+        path: ["ETSY_API_KEYSTRING"],
+      });
+    }
+    if (!hasEtsyApiSharedSecret) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "ETSY_API_SHARED_SECRET is required when ETSY_API_KEYSTRING is provided",
+        path: ["ETSY_API_SHARED_SECRET"],
       });
     }
   }

@@ -2,7 +2,7 @@ import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "./research.helper.js";
-import { fetchEtsyMetadata } from "./research.metadata.js";
+import { fetchEtsyListingFromApi } from "./research.etsy.js";
 import {
   ACTIVE_DESIGN_STATUSES,
   findLeastWorkloadDesigner,
@@ -20,7 +20,6 @@ import {
 import { buildDateRangeFilter } from "../role-activity/roleActivity.helper.js";
 import {
   DuplicateResearchItemData,
-  EtsyMetadata,
   ReassignedResearchItemData,
   ResearchItemListResult,
   ResearchReviewActivity,
@@ -72,7 +71,6 @@ const duplicateResearchItemSelect = {
 } as const;
 
 export type CreateResearchItemOptions = {
-  metadataFetcher?: (url: string) => Promise<EtsyMetadata>;
   manualImageFile?: { buffer: Buffer; mimetype: string };
   uploader?: ReferenceImageUploader;
   destroyer?: ReferenceImageDestroyer;
@@ -137,25 +135,12 @@ export const createResearchItem = async (
     referenceImageUrl = uploadResult.secureUrl;
     referenceImagePublicId = uploadResult.publicId;
 
-    // Best-effort metadata fetch for title
-    try {
-      const metadataFetcher = options.metadataFetcher ?? fetchEtsyMetadata;
-      const metadata = await metadataFetcher(normalizedUrl);
-      itemTitle = metadata.title;
-    } catch {
-      itemTitle = null;
-    }
+    const metadata = await fetchEtsyListingFromApi(etsyListingId);
+    itemTitle = metadata.title;
   } else {
-    // 2b. No manual image: attempt Etsy metadata extraction
-    try {
-      const metadataFetcher = options?.metadataFetcher ?? fetchEtsyMetadata;
-      const metadata = await metadataFetcher(normalizedUrl);
-      itemTitle = metadata.title;
-      referenceImageUrl = metadata.referenceImageUrl;
-    } catch {
-      itemTitle = null;
-      referenceImageUrl = null;
-    }
+    const metadata = await fetchEtsyListingFromApi(etsyListingId);
+    itemTitle = metadata.title;
+    referenceImageUrl = metadata.referenceImageUrl;
   }
 
   // 3. Invariant check: A research item must NEVER be created without a reference image
@@ -1288,7 +1273,6 @@ export const previewResearchItem = async (
   userId: string,
   input: PreviewResearchItemInput,
   actorRoles: readonly WorkspaceRole[],
-  options?: CreateResearchItemOptions
 ): Promise<ResearchPreviewResult> => {
   const isAdmin = actorRoles.includes(WorkspaceRole.ADMIN);
   const { normalizedUrl, etsyListingId } = extractEtsyListing(input.etsyUrl);
@@ -1310,13 +1294,7 @@ export const previewResearchItem = async (
       }),
     ]);
 
-  let metadata: EtsyMetadata = { title: null, referenceImageUrl: null };
-  try {
-    const metadataFetcher = options?.metadataFetcher ?? fetchEtsyMetadata;
-    metadata = await metadataFetcher(normalizedUrl);
-  } catch {
-    metadata = { title: null, referenceImageUrl: null };
-  }
+  const metadata = await fetchEtsyListingFromApi(etsyListingId);
 
   return {
     etsyListingId,
