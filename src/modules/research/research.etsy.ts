@@ -19,8 +19,18 @@ const emptyMetadata = (): EtsyMetadata => ({
   referenceImageUrl: null,
 });
 
-const normalizeTitle = (title: string | null | undefined): string | null => {
-  const trimmed = title?.trim() ?? "";
+export const decodeEtsyTitleEntities = (value: string): string => value.replace(
+  /&(amp|apos|quot|lt|gt|nbsp);|&#(\d+);|&#x([0-9a-fA-F]+);/g,
+  (entity, named: string | undefined, decimal: string | undefined, hexadecimal: string | undefined) => {
+    if (named) return ({ amp: "&", apos: "'", quot: '"', lt: "<", gt: ">", nbsp: "\u00a0" } as Record<string, string>)[named] ?? entity;
+    const codePoint = Number.parseInt(decimal ?? hexadecimal ?? "", hexadecimal ? 16 : 10);
+    if (!Number.isSafeInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return entity;
+    try { return String.fromCodePoint(codePoint); } catch { return entity; }
+  },
+);
+
+export const normalizeEtsyTitle = (title: string | null | undefined): string | null => {
+  const trimmed = title ? decodeEtsyTitleEntities(title).trim() : "";
   return trimmed ? trimmed.slice(0, 500) : null;
 };
 
@@ -82,7 +92,7 @@ export const fetchEtsyListingFromApi = async (
       : null;
 
     return {
-      title: normalizeTitle(parsedResponse.data.title),
+      title: normalizeEtsyTitle(parsedResponse.data.title),
       referenceImageUrl,
     };
   } catch (error) {
