@@ -1,0 +1,89 @@
+name: Deploy GCP Production
+
+on:
+  workflow_run:
+    workflows: [Backend CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: storeops-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.name == 'Backend CI' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out validated revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Validate tested deployment SHA
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "workflow_run.head_sha is missing or invalid." >&2
+            exit 1
+          fi
+
+      - name: Deploy through IAP
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          gcloud compute ssh "${{ vars.GCP_VM_USER }}@${{ vars.GCP_VM_NAME }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --zone="${{ vars.GCP_ZONE }}" \
+            --tunnel-through-iap \
+            --command="
+              set -euo pipefail
+              DEPLOY_SHA='${DEPLOY_SHA}'
+
+              cd /home/mahdimoin919/storeops_backend
+              git fetch origin main
+              git reset --hard \"\$DEPLOY_SHA\"
+              if [ \"\$(git rev-parse HEAD)\" != \"\$DEPLOY_SHA\" ]; then
+                echo \"Deployed revision does not match the CI-tested SHA.\" >&2
+                exit 1
+              fi
+              /usr/bin/pnpm install --frozen-lockfile
+              /usr/bin/pnpm build
+              /usr/bin/pnpm prisma migrate deploy
+              /usr/bin/pm2 reload storeops-backend
+
+              for attempt in \$(seq 1 6); do
+                response=\"\$(curl --fail --silent --show-error http://127.0.0.1:5000/api/v1/health)\" || true
+                if printf \"%s\" \"\$response\" | grep -Eq \"\\\"database\\\"[[:space:]]*:[[:space:]]*\\\"connected\\\"\"; then
+                  exit 0
+                fi
+
+                if [ \"\$attempt\" -lt 6 ]; then
+                  sleep 2
+                fi
+              done
+
+              echo \"Health check did not confirm database connectivity after PM2 reload.\" >&2
+              exit 1
+            "
