@@ -26,6 +26,8 @@ import {
   previewResearchItemSchema,
   reassignDesignerBodySchema,
   updateResearchItemBodySchema,
+  presignReferenceImageBodySchema,
+  finalizeReferenceImageBodySchema,
 } from "./research.validation.js";
 
 // Creates a research item from an Etsy listing URL and automatically assigns an eligible designer.
@@ -42,19 +44,12 @@ export const createResearchItem = async (
 
   const validatedInput = createResearchItemSchema.parse(req.body);
 
-  const manualImageFile = req.file
-    ? {
-        buffer: req.file.buffer,
-        mimetype: req.file.mimetype,
-      }
-    : undefined;
-
   const researchItem = await researchService.createResearchItem(
     workspaceId,
     authReq.user.id,
     validatedInput,
     authReq.workspaceMembership.roles,
-    { manualImageFile }
+    { uploadSessionToken: validatedInput.uploadSessionToken }
   );
 
   ApiResponse.success(res, {
@@ -91,6 +86,17 @@ export const getResearchItems = async (
     message: "Research items retrieved successfully",
     data: result,
   });
+};
+
+export const presignReferenceImageUpload = async (req: Request, res: Response): Promise<void> => {
+  const authReq = req as WorkspaceAuthorizedRequest;
+  const input = presignReferenceImageBodySchema.parse(req.body);
+  const workspaceId = Array.isArray(req.params.workspaceId) ? req.params.workspaceId[0] : req.params.workspaceId;
+  const result = await researchService.presignReferenceImageUpload({
+    workspaceId, userId: authReq.user.id, purpose: input.purpose,
+    expectedSize: input.expectedSize, contentType: input.contentType, researchItemId: input.researchItemId,
+  });
+  ApiResponse.success(res, { statusCode: 200, message: "Reference image upload authorized", data: result });
 };
 
 export const getReferenceUsageHistory = async (
@@ -363,19 +369,14 @@ export const uploadResearchReferenceImage = async (
     req.params
   );
 
-  if (!req.file) {
-    throw new ApiError(400, "Image file is required on 'image' field");
-  }
+  const { uploadSessionToken } = finalizeReferenceImageBodySchema.parse(req.body);
 
   const result = await researchService.uploadResearchReferenceImage(
     workspaceId,
     researchItemId,
     authReq.user.id,
     authReq.workspaceMembership.roles,
-    {
-      buffer: req.file.buffer,
-      mimetype: req.file.mimetype,
-    }
+    uploadSessionToken
   );
 
   ApiResponse.success(res, {

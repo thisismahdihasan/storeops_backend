@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
+  CopyObjectCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -37,6 +38,41 @@ export type PresignedReferenceImageInput = PresignedDownloadInput & { isAttachme
 
 export const buildReferenceImageKey = ({ workspaceId, ext }: { workspaceId: string; ext: string }): string =>
   `workspaces/${workspaceId}/reference-images/${crypto.randomUUID()}.${ext.replace(/^\./, "")}`;
+
+export const buildTempReferenceImageKey = (workspaceId: string): string =>
+  `temp/reference-images/${workspaceId}/${crypto.randomUUID()}`;
+
+export const getPresignedReferenceImagePutUrl = async (input: {
+  storageKey: string;
+  contentType: string;
+}): Promise<string> => getSignedUrl(r2Client, new PutObjectCommand({
+  Bucket: env.R2_BUCKET_NAME,
+  Key: input.storageKey,
+  ContentType: safeDownloadContentType(input.contentType),
+}), { expiresIn: 300 });
+
+export const readObjectRange = async (storageKey: string, start = 0, end = 15): Promise<Buffer> => {
+  const response = await r2Client.send(new GetObjectCommand({
+    Bucket: env.R2_BUCKET_NAME,
+    Key: storageKey,
+    Range: `bytes=${start}-${end}`,
+  }));
+  if (!response.Body) throw new Error("Storage object body is unavailable");
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) chunks.push(chunk);
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+};
+
+export const copyObject = async (sourceStorageKey: string, destinationStorageKey: string, contentType: string): Promise<void> => {
+  await r2Client.send(new CopyObjectCommand({
+    Bucket: env.R2_BUCKET_NAME,
+    Key: destinationStorageKey,
+    CopySource: `${env.R2_BUCKET_NAME}/${sourceStorageKey}`,
+    ContentType: contentType,
+    MetadataDirective: "REPLACE",
+    CacheControl: "private, max-age=86400",
+  }));
+};
 
 export const putObjectBuffer = async ({ storageKey, buffer, contentType }: PutObjectBufferInput): Promise<void> => {
   await r2Client.send(new PutObjectCommand({

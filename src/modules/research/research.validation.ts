@@ -54,10 +54,30 @@ export const createResearchItemSchema = z
       .transform((val) => (val.length === 0 ? null : val))
       .nullable()
       .optional(),
+    uploadSessionToken: z.string().trim().min(1).max(4096).optional(),
   })
   .strict();
 
 export type CreateResearchItemInput = z.infer<typeof createResearchItemSchema>;
+
+export const presignReferenceImageBodySchema = z.object({
+  purpose: z.enum(["CREATE_RESEARCH_REFERENCE_IMAGE", "REPLACE_RESEARCH_REFERENCE_IMAGE"]),
+  expectedSize: z.number().int().positive().max(10 * 1024 * 1024),
+  contentType: z.string().trim().min(1).max(100),
+  researchItemId: z.string().trim().min(1).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.purpose === "REPLACE_RESEARCH_REFERENCE_IMAGE" && !value.researchItemId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["researchItemId"], message: "researchItemId is required for replacement" });
+  }
+  if (value.purpose === "CREATE_RESEARCH_REFERENCE_IMAGE" && value.researchItemId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["researchItemId"], message: "researchItemId is not valid for creation" });
+  }
+});
+export type PresignReferenceImageBodyInput = z.infer<typeof presignReferenceImageBodySchema>;
+
+export const finalizeReferenceImageBodySchema = z.object({
+  uploadSessionToken: z.string().trim().min(1).max(4096),
+}).strict();
 
 export const getResearchItemsQuerySchema = z.object({
   createdBy: z.string().trim().min(1, "createdBy cannot be empty").optional(),

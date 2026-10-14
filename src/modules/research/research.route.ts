@@ -18,11 +18,8 @@ import {
   syncResearchAssignments,
   updateResearchItem,
   uploadResearchReferenceImage,
+  presignReferenceImageUpload,
 } from "./research.controller.js";
-import {
-  optionalReferenceImageUploadMiddleware,
-  referenceImageUploadMiddleware,
-} from "./research.upload.js";
 
 const router: Router = Router({ mergeParams: true });
 
@@ -37,8 +34,14 @@ router.post(
   "/",
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.RESEARCHER),
-  optionalReferenceImageUploadMiddleware,
   catchAsync(createResearchItem)
+);
+
+router.post(
+  "/reference-image/presign",
+  requireAuth,
+  requireWorkspaceRole(WorkspaceRole.RESEARCHER, WorkspaceRole.ADMIN),
+  catchAsync(presignReferenceImageUpload)
 );
 
 router.get(
@@ -99,7 +102,6 @@ router.post(
   "/:researchItemId/reference-image",
   requireAuth,
   requireWorkspaceRole(WorkspaceRole.ADMIN, WorkspaceRole.RESEARCHER),
-  referenceImageUploadMiddleware,
   catchAsync(uploadResearchReferenceImage)
 );
 

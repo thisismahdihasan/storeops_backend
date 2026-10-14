@@ -35,8 +35,12 @@ import {
   uploadReferenceImageToR2,
   ReferenceImageDestroyer,
 } from "./research.storage.js";
-import { deleteObject } from "../storage/r2.js";
+import { buildReferenceImageKey, copyObject, deleteObject, headObject, readObjectRange } from "../storage/r2.js";
 import { fetchSafeImageBuffer } from "./research.referenceImage.js";
+import { detectCanonicalImageSignature, MAX_REFERENCE_IMAGE_SIZE_BYTES } from "./research.storage.js";
+import { ReferenceImageUploadPurpose, verifyReferenceImageUploadSession } from "./research.reference-image-session.js";
+import { buildTempReferenceImageKey, getPresignedReferenceImagePutUrl } from "../storage/r2.js";
+import { signReferenceImageUploadSession } from "./research.reference-image-session.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
@@ -72,7 +76,33 @@ const duplicateResearchItemSelect = {
 } as const;
 
 export type CreateResearchItemOptions = {
-  manualImageFile?: { buffer: Buffer; mimetype: string };
+  uploadSessionToken?: string;
+};
+
+const finalizeDirectReferenceImage = async (input: { token: string; workspaceId: string; userId: string; purpose: ReferenceImageUploadPurpose; researchItemId?: string }) => {
+  const session = verifyReferenceImageUploadSession(input.token);
+  if (session.purpose !== input.purpose || session.workspaceId !== input.workspaceId || session.userId !== input.userId || session.researchItemId !== input.researchItemId) throw new ApiError(403, "Reference image upload session does not match this request");
+  try {
+    const metadata = await headObject(session.tempStorageKey);
+    if (!metadata.contentLength || metadata.contentLength > MAX_REFERENCE_IMAGE_SIZE_BYTES || metadata.contentLength !== session.expectedSize) throw new ApiError(400, "Uploaded reference image size could not be verified");
+    const signature = detectCanonicalImageSignature(await readObjectRange(session.tempStorageKey));
+    if (!signature) throw new ApiError(400, "Uploaded reference image has an invalid binary signature");
+    const storageKey = buildReferenceImageKey({ workspaceId: input.workspaceId, ext: signature.extension });
+    await copyObject(session.tempStorageKey, storageKey, signature.mimeType);
+    return { storageKey, tempStorageKey: session.tempStorageKey };
+  } catch (error) {
+    await deleteObject(session.tempStorageKey).catch(() => undefined);
+    throw error;
+  }
+};
+
+export const presignReferenceImageUpload = async (input: { workspaceId: string; userId: string; purpose: ReferenceImageUploadPurpose; expectedSize: number; contentType: string; researchItemId?: string }) => {
+  const tempStorageKey = buildTempReferenceImageKey(input.workspaceId);
+  const sessionToken = signReferenceImageUploadSession({
+    purpose: input.purpose, workspaceId: input.workspaceId, userId: input.userId,
+    tempStorageKey, expectedSize: input.expectedSize, researchItemId: input.researchItemId,
+  });
+  return { uploadUrl: await getPresignedReferenceImagePutUrl({ storageKey: tempStorageKey, contentType: input.contentType }), sessionToken };
 };
 
 // Creates a new research item, parses metadata or handles manual upload, and atomically auto-assigns the least-loaded designer.
@@ -121,12 +151,14 @@ export const createResearchItem = async (
 
   // 2. Resolve reference image (manual upload or automatic Etsy extraction)
   let referenceImageStorageKey: string | null = null;
+  let temporaryReferenceImageStorageKey: string | null = null;
   let itemTitle: string | null = null;
 
-  if (options?.manualImageFile) {
+  if (options?.uploadSessionToken) {
     // 2a. Manual image file provided: validate and upload to private R2 first.
-    const uploadResult = await uploadReferenceImageToR2({ workspaceId, buffer: options.manualImageFile.buffer });
+    const uploadResult = await finalizeDirectReferenceImage({ token: options.uploadSessionToken, workspaceId, userId, purpose: "CREATE_RESEARCH_REFERENCE_IMAGE" });
     referenceImageStorageKey = uploadResult.storageKey;
+    temporaryReferenceImageStorageKey = uploadResult.tempStorageKey;
 
     const metadata = await fetchEtsyListingFromApi(etsyListingId);
     itemTitle = metadata.title;
@@ -253,6 +285,11 @@ export const createResearchItem = async (
     });
 
     const { referenceImageStorageKey: createdStorageKey, ...safeCreatedItem } = createdItem;
+    if (temporaryReferenceImageStorageKey) {
+      await deleteObject(temporaryReferenceImageStorageKey).catch(() => {
+        console.warn("[STORAGE_CLEANUP_WARNING] Failed to delete promoted temporary reference image", { workspaceId });
+      });
+    }
     return {
       ...safeCreatedItem,
       hasReferenceImage: Boolean(createdStorageKey || safeCreatedItem.referenceImageUrl),
@@ -266,6 +303,7 @@ export const createResearchItem = async (
         console.warn("[STORAGE_CLEANUP_WARNING] Failed to delete rolled-back R2 reference image", { workspaceId });
       }
     }
+    if (temporaryReferenceImageStorageKey) await deleteObject(temporaryReferenceImageStorageKey).catch(() => undefined);
 
     throw error;
   }
@@ -1344,7 +1382,7 @@ export const uploadResearchReferenceImage = async (
   researchItemId: string,
   actorUserId: string,
   actorRoles: readonly WorkspaceRole[],
-  file: { buffer: Buffer; mimetype: string },
+  uploadSessionToken: string,
   options?: UploadReferenceImageOptions
 ): Promise<ManualReferenceImageUploadResult> => {
   const existingItem = await prisma.researchItem.findFirst({
@@ -1367,7 +1405,13 @@ export const uploadResearchReferenceImage = async (
     throw new ApiError(404, "Research item not found");
   }
 
-  const uploadResult = await uploadReferenceImageToR2({ workspaceId, buffer: file.buffer });
+  const uploadResult = await finalizeDirectReferenceImage({
+    token: uploadSessionToken,
+    workspaceId,
+    userId: actorUserId,
+    purpose: "REPLACE_RESEARCH_REFERENCE_IMAGE",
+    researchItemId,
+  });
 
   try {
     await prisma.researchItem.update({
@@ -1383,7 +1427,8 @@ export const uploadResearchReferenceImage = async (
       },
     });
   } catch (dbError) {
-    await deleteObject(uploadResult.storageKey);
+    await deleteObject(uploadResult.storageKey).catch(() => undefined);
+    await deleteObject(uploadResult.tempStorageKey).catch(() => undefined);
     throw dbError;
   }
 
@@ -1394,6 +1439,10 @@ export const uploadResearchReferenceImage = async (
       options?.destroyer ?? destroyReferenceImageFromCloudinary;
     await destroyer(existingItem.referenceImagePublicId);
   }
+
+  await deleteObject(uploadResult.tempStorageKey).catch(() => {
+    console.warn("[STORAGE_CLEANUP_WARNING] Failed to delete promoted temporary reference image", { workspaceId, researchItemId });
+  });
 
   return {
     researchItemId: existingItem.id,
