@@ -7,6 +7,7 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -31,6 +32,30 @@ export type PresignedDownloadInput = {
   mimeType: string;
   expiresInSeconds: number;
 };
+export type PutObjectBufferInput = { storageKey: string; buffer: Buffer; contentType: string };
+export type PresignedReferenceImageInput = PresignedDownloadInput & { isAttachment: boolean };
+
+export const buildReferenceImageKey = ({ workspaceId, ext }: { workspaceId: string; ext: string }): string =>
+  `workspaces/${workspaceId}/reference-images/${crypto.randomUUID()}.${ext.replace(/^\./, "")}`;
+
+export const putObjectBuffer = async ({ storageKey, buffer, contentType }: PutObjectBufferInput): Promise<void> => {
+  await r2Client.send(new PutObjectCommand({
+    Bucket: env.R2_BUCKET_NAME,
+    Key: storageKey,
+    Body: buffer,
+    ContentType: contentType,
+    CacheControl: "private, max-age=86400",
+  }));
+};
+
+export const getPresignedReferenceImageUrl = async ({ storageKey, fileName, mimeType, isAttachment, expiresInSeconds }: PresignedReferenceImageInput): Promise<string> =>
+  getSignedUrl(r2Client, new GetObjectCommand({
+    Bucket: env.R2_BUCKET_NAME,
+    Key: storageKey,
+    ResponseCacheControl: "private, max-age=86400",
+    ResponseContentDisposition: `${isAttachment ? "attachment" : "inline"}; filename="${sanitizeFinalAssetFileName(fileName)}"`,
+    ResponseContentType: safeDownloadContentType(mimeType),
+  }), { expiresIn: expiresInSeconds });
 
 export type PresignedUploadPartInput = {
   storageKey: string;

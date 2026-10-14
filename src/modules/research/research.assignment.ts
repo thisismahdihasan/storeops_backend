@@ -123,12 +123,12 @@ export const assignUnassignedResearchBacklog = async (
   });
 
   // Fetch unassigned RESEARCHED candidates with valid reference images in deterministic order (oldest first).
-  // Historical items with null referenceImageUrl are protected and never assigned.
+  // Items without either a managed R2 key or legacy URL are protected and never assigned.
   const candidates = await prisma.researchItem.findMany({
     where: {
       workspaceId,
       status: ResearchStatus.RESEARCHED,
-      referenceImageUrl: { not: null },
+      OR: [{ referenceImageStorageKey: { not: null } }, { referenceImageUrl: { not: null } }],
       designAssignments: { none: { isCurrent: true } },
     },
     select: { id: true },
@@ -169,7 +169,7 @@ export const assignUnassignedResearchBacklog = async (
             where: {
               id: candidate.id,
               status: ResearchStatus.RESEARCHED,
-              referenceImageUrl: { not: null },
+              OR: [{ referenceImageStorageKey: { not: null } }, { referenceImageUrl: { not: null } }],
             },
             data: { status: ResearchStatus.ASSIGNED },
           });
@@ -238,7 +238,7 @@ export const assignUnassignedResearchBacklog = async (
     where: {
       workspaceId,
       status: ResearchStatus.RESEARCHED,
-      referenceImageUrl: { not: null },
+      OR: [{ referenceImageStorageKey: { not: null } }, { referenceImageUrl: { not: null } }],
       designAssignments: { none: { isCurrent: true } },
     },
   });

@@ -1,4 +1,4 @@
-import { Prisma, ResearchStatus, WorkspaceRole } from "@prisma/client";
+import { Prisma, ReferenceImageStorageProvider, ResearchStatus, WorkspaceRole } from "@prisma/client";
 import prisma from "../../lib/prisma.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { extractEtsyListing } from "./research.helper.js";
@@ -32,11 +32,11 @@ import {
 } from "./research.type.js";
 import {
   destroyReferenceImageFromCloudinary,
-  uploadReferenceImageToCloudinary,
-  ReferenceImageUploader,
+  uploadReferenceImageToR2,
   ReferenceImageDestroyer,
 } from "./research.storage.js";
 import { deleteObject } from "../storage/r2.js";
+import { fetchSafeImageBuffer } from "./research.referenceImage.js";
 import { NOTIFICATION_TYPE_DESIGN_ASSIGNED } from "../notification/notification.type.js";
 import { acquireWorkspaceMemberMutationLock } from "../workspace/workspace.member-lock.js";
 import { getRoleAssignmentEligibilityFilter } from "../workspace/workspace.assignment-eligibility.js";
@@ -50,6 +50,7 @@ export const safeResearchItemSelect = {
   title: true,
   targetProduct: true,
   referenceImageUrl: true,
+  referenceImageStorageKey: true,
   status: true,
   createdById: true,
   createdAt: true,
@@ -72,8 +73,6 @@ const duplicateResearchItemSelect = {
 
 export type CreateResearchItemOptions = {
   manualImageFile?: { buffer: Buffer; mimetype: string };
-  uploader?: ReferenceImageUploader;
-  destroyer?: ReferenceImageDestroyer;
 };
 
 // Creates a new research item, parses metadata or handles manual upload, and atomically auto-assigns the least-loaded designer.
@@ -121,30 +120,27 @@ export const createResearchItem = async (
   }
 
   // 2. Resolve reference image (manual upload or automatic Etsy extraction)
-  let referenceImageUrl: string | null = null;
-  let referenceImagePublicId: string | null = null;
+  let referenceImageStorageKey: string | null = null;
   let itemTitle: string | null = null;
 
   if (options?.manualImageFile) {
-    // 2a. Manual image file provided: upload to Cloudinary first
-    const uploader = options.uploader ?? uploadReferenceImageToCloudinary;
-    const uploadResult = await uploader({
-      buffer: options.manualImageFile.buffer,
-      mimetype: options.manualImageFile.mimetype,
-    });
-    referenceImageUrl = uploadResult.secureUrl;
-    referenceImagePublicId = uploadResult.publicId;
+    // 2a. Manual image file provided: validate and upload to private R2 first.
+    const uploadResult = await uploadReferenceImageToR2({ workspaceId, buffer: options.manualImageFile.buffer });
+    referenceImageStorageKey = uploadResult.storageKey;
 
     const metadata = await fetchEtsyListingFromApi(etsyListingId);
     itemTitle = metadata.title;
   } else {
     const metadata = await fetchEtsyListingFromApi(etsyListingId);
     itemTitle = metadata.title;
-    referenceImageUrl = metadata.referenceImageUrl;
+    if (metadata.referenceImageUrl) {
+      const uploadResult = await uploadReferenceImageToR2({ workspaceId, buffer: await fetchSafeImageBuffer(metadata.referenceImageUrl) });
+      referenceImageStorageKey = uploadResult.storageKey;
+    }
   }
 
   // 3. Invariant check: A research item must NEVER be created without a reference image
-  if (!referenceImageUrl) {
+  if (!referenceImageStorageKey) {
     throw new ApiError(
       422,
       "A reference image is required to create this research item.",
@@ -218,8 +214,10 @@ export const createResearchItem = async (
           normalizedUrl,
           title: itemTitle,
           targetProduct: input.targetProduct ?? null,
-          referenceImageUrl,
-          referenceImagePublicId,
+          referenceImageUrl: null,
+          referenceImagePublicId: null,
+          referenceImageStorageKey,
+          referenceImageStorageProvider: ReferenceImageStorageProvider.R2,
           createdById: userId,
           status: initialStatus,
         },
@@ -254,16 +252,18 @@ export const createResearchItem = async (
       timeout: 15000,
     });
 
-    return createdItem;
+    const { referenceImageStorageKey: createdStorageKey, ...safeCreatedItem } = createdItem;
+    return {
+      ...safeCreatedItem,
+      hasReferenceImage: Boolean(createdStorageKey || safeCreatedItem.referenceImageUrl),
+    };
   } catch (error) {
-    // Roll back Cloudinary asset if manual image was uploaded but DB transaction failed
-    if (referenceImagePublicId) {
+    // Roll back the uploaded R2 asset if the DB transaction failed.
+    if (referenceImageStorageKey) {
       try {
-        const destroyer =
-          options?.destroyer ?? destroyReferenceImageFromCloudinary;
-        await destroyer(referenceImagePublicId);
+        await deleteObject(referenceImageStorageKey);
       } catch {
-        // Rollback error silently handled, preserving original error
+        console.warn("[STORAGE_CLEANUP_WARNING] Failed to delete rolled-back R2 reference image", { workspaceId });
       }
     }
 
@@ -281,6 +281,7 @@ export const safeResearchItemListSelect = Prisma.validator<Prisma.ResearchItemSe
   title: true,
   targetProduct: true,
   referenceImageUrl: true,
+  referenceImageStorageKey: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -342,6 +343,7 @@ const safeResearchItemDetailSelect = {
   title: true,
   targetProduct: true,
   referenceImageUrl: true,
+  referenceImageStorageKey: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -550,6 +552,7 @@ export const getResearchItems = async (
       title: item.title,
       targetProduct: item.targetProduct,
       referenceImageUrl: item.referenceImageUrl,
+      hasReferenceImage: Boolean(item.referenceImageStorageKey || item.referenceImageUrl),
       status: item.status,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
@@ -1006,6 +1009,7 @@ export const getResearchItemById = async (
     title: researchItem.title,
     targetProduct: researchItem.targetProduct,
     referenceImageUrl: researchItem.referenceImageUrl,
+    hasReferenceImage: Boolean(researchItem.referenceImageStorageKey || researchItem.referenceImageUrl),
     status: researchItem.status,
     createdAt: researchItem.createdAt,
     updatedAt: researchItem.updatedAt,
@@ -1061,7 +1065,13 @@ export const getAuthorizedReferenceImageData = async (
   researchItemId: string,
   userId: string,
   roles: readonly WorkspaceRole[]
-): Promise<{ id: string; referenceImageUrl: string }> => {
+): Promise<{
+  id: string;
+  referenceImageUrl: string | null;
+  referenceImagePublicId: string | null;
+  referenceImageStorageKey: string | null;
+  referenceImageStorageProvider: ReferenceImageStorageProvider;
+}> => {
   const item = await prisma.researchItem.findFirst({
     where: {
       id: researchItemId,
@@ -1071,6 +1081,9 @@ export const getAuthorizedReferenceImageData = async (
       id: true,
       createdById: true,
       referenceImageUrl: true,
+      referenceImagePublicId: true,
+      referenceImageStorageKey: true,
+      referenceImageStorageProvider: true,
       designAssignments: {
         where: { isCurrent: true },
         orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
@@ -1101,13 +1114,17 @@ export const getAuthorizedReferenceImageData = async (
     }
   }
 
-  if (!item.referenceImageUrl || item.referenceImageUrl.trim() === "") {
+  const referenceImageUrl = item.referenceImageUrl?.trim() || null;
+  if (!item.referenceImageStorageKey && !referenceImageUrl) {
     throw new ApiError(404, "Reference image not available");
   }
 
   return {
     id: item.id,
-    referenceImageUrl: item.referenceImageUrl.trim(),
+    referenceImageUrl,
+    referenceImagePublicId: item.referenceImagePublicId,
+    referenceImageStorageKey: item.referenceImageStorageKey,
+    referenceImageStorageProvider: item.referenceImageStorageProvider,
   };
 };
 
@@ -1318,11 +1335,10 @@ export const previewResearchItem = async (
 };
 
 export type UploadReferenceImageOptions = {
-  uploader?: ReferenceImageUploader;
   destroyer?: ReferenceImageDestroyer;
 };
 
-// Manually uploads and updates the reference image for a research item in Cloudinary.
+// Manually uploads and updates the reference image in R2 before cleaning any legacy asset.
 export const uploadResearchReferenceImage = async (
   workspaceId: string,
   researchItemId: string,
@@ -1341,6 +1357,8 @@ export const uploadResearchReferenceImage = async (
     },
     select: {
       id: true,
+      referenceImageStorageKey: true,
+      referenceImageStorageProvider: true,
       referenceImagePublicId: true,
     },
   });
@@ -1349,11 +1367,7 @@ export const uploadResearchReferenceImage = async (
     throw new ApiError(404, "Research item not found");
   }
 
-  const uploader = options?.uploader ?? uploadReferenceImageToCloudinary;
-  const uploadResult = await uploader({
-    buffer: file.buffer,
-    mimetype: file.mimetype,
-  });
+  const uploadResult = await uploadReferenceImageToR2({ workspaceId, buffer: file.buffer });
 
   try {
     await prisma.researchItem.update({
@@ -1362,21 +1376,20 @@ export const uploadResearchReferenceImage = async (
         workspaceId,
       },
       data: {
-        referenceImageUrl: uploadResult.secureUrl,
-        referenceImagePublicId: uploadResult.publicId,
+        referenceImageUrl: null,
+        referenceImagePublicId: null,
+        referenceImageStorageKey: uploadResult.storageKey,
+        referenceImageStorageProvider: ReferenceImageStorageProvider.R2,
       },
     });
   } catch (dbError) {
-    const destroyer =
-      options?.destroyer ?? destroyReferenceImageFromCloudinary;
-    await destroyer(uploadResult.publicId);
+    await deleteObject(uploadResult.storageKey);
     throw dbError;
   }
 
-  if (
-    existingItem.referenceImagePublicId &&
-    existingItem.referenceImagePublicId !== uploadResult.publicId
-  ) {
+  if (existingItem.referenceImageStorageProvider === ReferenceImageStorageProvider.R2 && existingItem.referenceImageStorageKey) {
+    await deleteObject(existingItem.referenceImageStorageKey);
+  } else if (existingItem.referenceImagePublicId) {
     const destroyer =
       options?.destroyer ?? destroyReferenceImageFromCloudinary;
     await destroyer(existingItem.referenceImagePublicId);
@@ -1384,7 +1397,7 @@ export const uploadResearchReferenceImage = async (
 
   return {
     researchItemId: existingItem.id,
-    referenceImageUrl: uploadResult.secureUrl,
+    hasReferenceImage: true,
   };
 };
 
@@ -1417,7 +1430,11 @@ export const updateResearchItem = async (
     select: safeResearchItemSelect,
   });
 
-  return updatedItem;
+  const { referenceImageStorageKey, ...safeUpdatedItem } = updatedItem;
+  return {
+    ...safeUpdatedItem,
+    hasReferenceImage: Boolean(referenceImageStorageKey || safeUpdatedItem.referenceImageUrl),
+  };
 };
 
 export type DeleteResearchItemOptions = {
@@ -1447,6 +1464,8 @@ export const deleteResearchItem = async (
       select: {
         id: true,
         referenceImagePublicId: true,
+        referenceImageStorageKey: true,
+        referenceImageStorageProvider: true,
         reviewSubmissions: {
           where: { imageDeletedAt: null },
           select: { imagePublicId: true },
@@ -1484,6 +1503,8 @@ export const deleteResearchItem = async (
     return {
       researchItemId: item.id,
       referenceImagePublicId: item.referenceImagePublicId,
+      referenceImageStorageKey: item.referenceImageStorageKey,
+      referenceImageStorageProvider: item.referenceImageStorageProvider,
       reviewImagePublicIds,
       finalAssetStorageKeys,
     };
@@ -1493,6 +1514,8 @@ export const deleteResearchItem = async (
   await cleanupExternalAssets({
     researchItemId: cleanupMetadata.researchItemId,
     referenceImagePublicId: cleanupMetadata.referenceImagePublicId,
+    referenceImageStorageKey: cleanupMetadata.referenceImageStorageKey,
+    referenceImageStorageProvider: cleanupMetadata.referenceImageStorageProvider,
     reviewImagePublicIds: cleanupMetadata.reviewImagePublicIds,
     finalAssetStorageKeys: cleanupMetadata.finalAssetStorageKeys,
     destroyer: options?.destroyer,
@@ -1509,6 +1532,8 @@ export const deleteResearchItem = async (
 type ExternalAssetCleanupInput = {
   researchItemId: string;
   referenceImagePublicId: string | null;
+  referenceImageStorageKey: string | null;
+  referenceImageStorageProvider: ReferenceImageStorageProvider;
   reviewImagePublicIds: string[];
   finalAssetStorageKeys: string[];
   destroyer?: ReferenceImageDestroyer;
@@ -1524,6 +1549,8 @@ const cleanupExternalAssets = async (
   const {
     researchItemId,
     referenceImagePublicId,
+    referenceImageStorageKey,
+    referenceImageStorageProvider,
     reviewImagePublicIds,
     finalAssetStorageKeys,
     destroyer,
@@ -1548,6 +1575,22 @@ const cleanupExternalAssets = async (
             error: error instanceof Error ? error.message : String(error),
           }
         );
+      })
+    );
+  }
+
+  if (
+    referenceImageStorageProvider === ReferenceImageStorageProvider.R2 &&
+    referenceImageStorageKey
+  ) {
+    cleanupTasks.push(
+      removeR2Object(referenceImageStorageKey).catch((error: unknown) => {
+        console.warn("[STORAGE_CLEANUP_WARNING] Failed to delete reference image from R2", {
+          researchItemId,
+          provider: "r2",
+          storageKey: referenceImageStorageKey,
+          error: error instanceof Error ? error.message : String(error),
+        });
       })
     );
   }

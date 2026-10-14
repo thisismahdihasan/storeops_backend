@@ -59,6 +59,7 @@ export type AdminListingListItem = {
   normalizedUrl: string;
   title: string | null;
   referenceImageUrl: string | null;
+  hasReferenceImage: boolean;
   status: ResearchStatus;
   createdAt: Date;
   updatedAt: Date;

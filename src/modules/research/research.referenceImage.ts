@@ -2,6 +2,7 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import { Transform, type TransformCallback } from "node:stream";
 import { ApiError } from "../../shared/ApiError.js";
+import { MAX_REFERENCE_IMAGE_SIZE_BYTES } from "./research.storage.js";
 
 const MAX_REDIRECTS = 3;
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -287,4 +288,26 @@ export const fetchSafeImageStream = async (
   }
 
   throw new ApiError(502, "Unable to load reference image");
+};
+
+export const fetchSafeImageBuffer = async (url: string): Promise<Buffer> => {
+  const image = await fetchSafeImageStream(url, { timeoutMs: DEFAULT_TIMEOUT_MS });
+  const reader = image.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_REFERENCE_IMAGE_SIZE_BYTES) {
+        await reader.cancel();
+        throw new ApiError(502, "Reference image exceeds maximum allowed size");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
 };

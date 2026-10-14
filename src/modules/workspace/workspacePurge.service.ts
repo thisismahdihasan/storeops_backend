@@ -107,6 +107,7 @@ const collectWorkspaceAssets = async (workspaceId: string) => {
       researchItems: {
         select: {
           referenceImagePublicId: true,
+          referenceImageStorageKey: true,
           reviewSubmissions: {
             where: { imageDeletedAt: null },
             select: { imagePublicId: true },
@@ -130,6 +131,10 @@ const collectWorkspaceAssets = async (workspaceId: string) => {
   for (const researchItem of workspace.researchItems) {
     if (researchItem.referenceImagePublicId) {
       cloudinaryPublicIds.add(researchItem.referenceImagePublicId);
+    }
+
+    if (researchItem.referenceImageStorageKey) {
+      r2StorageKeys.add(researchItem.referenceImageStorageKey);
     }
 
     for (const review of researchItem.reviewSubmissions) {

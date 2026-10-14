@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { pipeline, Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { ResearchStatus } from "@prisma/client";
+import { ReferenceImageStorageProvider, ResearchStatus } from "@prisma/client";
 import { WorkspaceAuthorizedRequest } from "../../middleware/requireWorkspaceRole.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { ApiResponse } from "../../shared/ApiResponse.js";
@@ -10,6 +10,7 @@ import {
   fetchSafeImageStream,
   isCloudinaryUrl,
 } from "./research.referenceImage.js";
+import { getPresignedReferenceImageUrl } from "../storage/r2.js";
 import { assignUnassignedResearchBacklog } from "./research.assignment.js";
 import * as researchService from "./research.service.js";
 import {
@@ -202,21 +203,49 @@ export const getResearchReferenceImage = async (
   const { download } = getReferenceImageQuerySchema.parse(req.query);
 
   const authReq = req as WorkspaceAuthorizedRequest;
-  const { referenceImageUrl } = await researchService.getAuthorizedReferenceImageData(
+  const referenceImage = await researchService.getAuthorizedReferenceImageData(
     workspaceId,
     researchItemId,
     authReq.user.id,
     authReq.workspaceMembership.roles
   );
 
-  if (!download && isCloudinaryUrl(referenceImageUrl)) {
-    res.setHeader("Cache-Control", "private, max-age=86400");
+  if (
+    referenceImage.referenceImageStorageProvider === ReferenceImageStorageProvider.R2 &&
+    referenceImage.referenceImageStorageKey
+  ) {
+    const extension = referenceImage.referenceImageStorageKey.endsWith(".png")
+      ? "png"
+      : referenceImage.referenceImageStorageKey.endsWith(".webp")
+        ? "webp"
+        : "jpg";
+    const mimeType = extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "image/jpeg";
+    const signedUrl = await getPresignedReferenceImageUrl({
+      storageKey: referenceImage.referenceImageStorageKey,
+      fileName: `reference-${researchItemId}.${extension}`,
+      mimeType,
+      isAttachment: download,
+      expiresInSeconds: download ? 120 : 900,
+    });
+
+    res.setHeader("Cache-Control", download ? "no-store" : "private, max-age=600");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-    res.redirect(302, referenceImageUrl);
+    res.redirect(302, signedUrl);
     return;
   }
 
-  const imageResult = await fetchSafeImageStream(referenceImageUrl);
+  if (!referenceImage.referenceImageUrl) {
+    throw new ApiError(404, "Reference image not available");
+  }
+
+  if (!download && isCloudinaryUrl(referenceImage.referenceImageUrl)) {
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.redirect(302, referenceImage.referenceImageUrl);
+    return;
+  }
+
+  const imageResult = await fetchSafeImageStream(referenceImage.referenceImageUrl);
 
   let ext = "jpg";
   if (imageResult.contentType.includes("png")) ext = "png";

@@ -20,6 +20,7 @@ export type SafeResearchItem = {
   title: string | null;
   targetProduct: string | null;
   referenceImageUrl: string | null;
+  hasReferenceImage: boolean;
   status: ResearchStatus;
   createdById: string;
   createdAt: Date;
@@ -53,6 +54,7 @@ export type ResearchItemReadItem = {
   title: string | null;
   targetProduct: string | null;
   referenceImageUrl: string | null;
+  hasReferenceImage: boolean;
   status: ResearchStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -174,7 +176,7 @@ export type ResearchPreviewResult = {
 
 export type ManualReferenceImageUploadResult = {
   researchItemId: string;
-  referenceImageUrl: string;
+  hasReferenceImage: true;
 };
 
 export type DeleteResearchItemResult = {

@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { getCloudinaryClient } from "../../config/cloudinary.js";
 import { ApiError } from "../../shared/ApiError.js";
+import { buildReferenceImageKey, putObjectBuffer } from "../storage/r2.js";
 
 // Cloudinary folder destination for manual research reference image uploads
 export const CLOUDINARY_RESEARCH_REFERENCE_FOLDER =
@@ -38,6 +39,23 @@ export type ReferenceImageUploader = (
 ) => Promise<ReferenceImageUploadResult>;
 
 export type ReferenceImageDestroyer = (publicId: string) => Promise<void>;
+
+export const detectCanonicalImageSignature = (buffer: Buffer): { mimeType: AllowedReferenceImageMimeType; extension: "jpg" | "png" | "webp" } | null => {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return { mimeType: "image/jpeg", extension: "jpg" };
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { mimeType: "image/png", extension: "png" };
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return { mimeType: "image/webp", extension: "webp" };
+  return null;
+};
+
+export const uploadReferenceImageToR2 = async ({ workspaceId, buffer }: { workspaceId: string; buffer: Buffer }): Promise<{ storageKey: string; mimeType: AllowedReferenceImageMimeType; extension: "jpg" | "png" | "webp" }> => {
+  if (!buffer?.length) throw new ApiError(400, "Image buffer cannot be empty");
+  if (buffer.length > MAX_REFERENCE_IMAGE_SIZE_BYTES) throw new ApiError(400, "Image size exceeds maximum limit of 10MB");
+  const signature = detectCanonicalImageSignature(buffer);
+  if (!signature) throw new ApiError(400, "Invalid reference image file binary signature");
+  const storageKey = buildReferenceImageKey({ workspaceId, ext: signature.extension });
+  await putObjectBuffer({ storageKey, buffer, contentType: signature.mimeType });
+  return { storageKey, ...signature };
+};
 
 // Confirms that the declared reference-image MIME type matches its recognizable binary signature.
 export const hasValidReferenceImageSignature = (

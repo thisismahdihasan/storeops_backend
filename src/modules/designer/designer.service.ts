@@ -244,6 +244,7 @@ export const safeDesignerWorkQueueSelect = {
       normalizedUrl: true,
       title: true,
       referenceImageUrl: true,
+      referenceImageStorageKey: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -532,12 +533,18 @@ export const getDesignerWorkQueue = async (
     prisma.designAssignment.count({ where }),
   ]);
 
-  const items: DesignerWorkQueueItem[] = assignments.map((assignment) => ({
-    assignmentId: assignment.id,
-    assignedAt: assignment.assignedAt,
-    startedAt: assignment.startedAt,
-    researchItem: assignment.researchItem,
-  }));
+  const items: DesignerWorkQueueItem[] = assignments.map((assignment) => {
+    const { referenceImageStorageKey, ...researchItem } = assignment.researchItem;
+    return {
+      assignmentId: assignment.id,
+      assignedAt: assignment.assignedAt,
+      startedAt: assignment.startedAt,
+      researchItem: {
+        ...researchItem,
+        hasReferenceImage: Boolean(referenceImageStorageKey || researchItem.referenceImageUrl),
+      },
+    };
+  });
 
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
@@ -1742,6 +1749,7 @@ export const getAdminDesignList = async (
         normalizedUrl: true,
         title: true,
         referenceImageUrl: true,
+        referenceImageStorageKey: true,
         status: true,
         createdAt: true,
         updatedAt: true,
@@ -1810,6 +1818,7 @@ export const getAdminDesignList = async (
       normalizedUrl: item.normalizedUrl,
       title: item.title,
       referenceImageUrl: item.referenceImageUrl,
+      hasReferenceImage: Boolean(item.referenceImageStorageKey || item.referenceImageUrl),
       status: item.status,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
